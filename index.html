@@ -126,6 +126,7 @@
             <div class="flex gap-2 overflow-x-auto no-scrollbar sm:flex-wrap sm:justify-center bg-white/80 backdrop-blur-xl p-2 sm:p-3 rounded-[24px] sm:rounded-[35px] shadow-2xl border border-white/50">
                 <button onclick="showTab('rolling')" id="btn-rolling" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs bg-indigo-600 text-white shadow-xl shadow-indigo-200 transition-all uppercase tracking-widest">Rolling</button>
                 <button onclick="showTab('piket')" id="btn-piket" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Piket</button>
+                <button onclick="showTab('prinsip')" id="btn-prinsip" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Prinsip Kerja</button>
                 <button onclick="showTab('jadwal-kerja')" id="btn-jadwal" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Kalender</button>
                 <button onclick="showTab('settings')" id="btn-settings" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Supabase</button>
             </div>
@@ -197,6 +198,41 @@
                             <div class="mt-8 pt-6 border-t border-slate-100">
                                 <button onclick="resetAllPiketIndicators()" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-rose-600 transition-all active:scale-95 mb-4">RESET SEMUA INDIKATOR</button>
                                 <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider text-center leading-relaxed">Status akan tersimpan selamanya<br>sampai di-reset manual.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Prinsip Kerja Section -->
+            <section id="prinsip" class="tab-content">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8">
+                    <div class="lg:col-span-3 bg-white rounded-[24px] sm:rounded-[40px] shadow-sm p-5 sm:p-10 border border-slate-100">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-10 gap-4">
+                            <div>
+                                <h2 class="text-xl sm:text-3xl font-black text-slate-800">Baca Prinsip-Prinsip Kerja</h2>
+                                <p id="prinsipStatusInfo" class="text-[10px] sm:text-[11px] text-indigo-500 font-black uppercase mt-2 tracking-[0.2em] sm:tracking-[0.3em]"></p>
+                            </div>
+                        </div>
+                        <p class="text-[11px] sm:text-xs text-slate-400 font-bold mb-6 tracking-wide">Klik nama untuk menandai sudah membaca. Nama akan pindah ke daftar "Sudah Membaca".</p>
+                        <div id="prinsipBelumContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3 sm:gap-4"></div>
+                    </div>
+
+                    <div class="lg:col-span-1 space-y-4 sm:space-y-6">
+                        <div class="bg-white rounded-[24px] sm:rounded-[32px] shadow-sm p-5 sm:p-8 border border-slate-100 lg:sticky lg:top-24">
+                            <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span> Sudah Membaca
+                            </h3>
+                            <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-6">Klik "Batal" jika salah tekan</p>
+                            <div id="prinsipSudahList" class="space-y-3 max-h-[300px] sm:max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-[24px] sm:rounded-[32px] shadow-sm p-5 sm:p-8 border border-slate-100">
+                            <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-slate-400"></span> Riwayat Siklus Selesai
+                            </h3>
+                            <div id="prinsipRiwayatList" class="space-y-2 max-h-[240px] overflow-y-auto pr-2 custom-scrollbar">
                             </div>
                         </div>
                     </div>
@@ -283,6 +319,9 @@
         ];
 
         let extraHolidays = [], attendancePiket = {}, customDailyRolling = {}, absentData = {}, masterSchedules = {}, karyawanPhotos = {};
+        // prinsipSudahBaca: { nama: isoTimestamp } untuk siklus yang sedang berjalan
+        // prinsipRiwayat: array of { completedAt: isoTimestamp, entries: { nama: isoTimestamp } } untuk siklus yang sudah selesai (auto-reset)
+        let prinsipSudahBaca = {}, prinsipRiwayat = [];
         
         const getLocalDateString = (date) => date.toLocaleDateString('sv-SE'); 
 
@@ -320,6 +359,7 @@
         function triggerCloudSave() {
             const payload = { 
                 extraHolidays, attendancePiket, customDailyRolling, absentData, karyawanPhotos,
+                prinsipSudahBaca, prinsipRiwayat,
                 cycleBaseDate: document.getElementById('cycleBaseDate').value 
             };
             localStorage.setItem('local_data_v4.8', JSON.stringify(payload));
@@ -355,6 +395,8 @@
                 customDailyRolling = d.customDailyRolling || {};
                 absentData = d.absentData || {};
                 karyawanPhotos = d.karyawanPhotos || {};
+                prinsipSudahBaca = d.prinsipSudahBaca || {};
+                prinsipRiwayat = d.prinsipRiwayat || [];
                 if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
             }
 
@@ -378,6 +420,8 @@
                         customDailyRolling = d.customDailyRolling || customDailyRolling;
                         absentData = d.absentData || absentData;
                         karyawanPhotos = d.karyawanPhotos || karyawanPhotos;
+                        prinsipSudahBaca = d.prinsipSudahBaca || prinsipSudahBaca;
+                        prinsipRiwayat = d.prinsipRiwayat || prinsipRiwayat;
                         if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
                     }
                     setCloudStatus('SUCCESS');
@@ -388,6 +432,7 @@
             } else {
                 setCloudStatus('IDLE');
             }
+            renderPrinsipKerja();
             initSchedules();
         }
 
@@ -823,6 +868,98 @@
                 renderPiketArea();
                 triggerCloudSave();
             }
+        }
+
+        // PRINSIP KERJA ENGINE
+        function renderPrinsipKerja() {
+            const belumContainer = document.getElementById('prinsipBelumContainer');
+            const sudahList = document.getElementById('prinsipSudahList');
+            const riwayatList = document.getElementById('prinsipRiwayatList');
+            const infoText = document.getElementById('prinsipStatusInfo');
+            if(!belumContainer || !sudahList || !riwayatList || !infoText) return;
+
+            const sudahNames = Object.keys(prinsipSudahBaca);
+            const belumNames = KARYAWAN_MASTER.filter(n => !sudahNames.includes(n));
+
+            infoText.innerText = `${sudahNames.length} / ${KARYAWAN_MASTER.length} Sudah Membaca`;
+
+            // List belum membaca -> klik untuk tandai sudah baca
+            belumContainer.innerHTML = '';
+            if(belumNames.length === 0) {
+                belumContainer.innerHTML = `<div class="col-span-full py-16 text-center text-slate-300 font-black uppercase text-xs tracking-[0.3em]">Semua Sudah Membaca</div>`;
+            } else {
+                belumNames.forEach(name => {
+                    belumContainer.innerHTML += `
+                        <div onclick="markPrinsipRead('${name}')" class="flex flex-col items-center gap-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-all active:scale-95">
+                            ${getAvatarHtml(name, "w-9 h-9")}
+                            <span class="text-[11px] font-bold text-slate-700 text-center leading-tight">${name}</span>
+                        </div>`;
+                });
+            }
+
+            // List sudah membaca (siklus aktif) -> bisa dibatalkan
+            sudahList.innerHTML = '';
+            if(sudahNames.length === 0) {
+                sudahList.innerHTML = `<div class="py-10 text-center text-slate-300 font-bold text-[10px] uppercase">Belum Ada</div>`;
+            } else {
+                sudahNames
+                    .sort((a,b) => new Date(prinsipSudahBaca[a]) - new Date(prinsipSudahBaca[b]))
+                    .forEach(name => {
+                        const time = new Date(prinsipSudahBaca[name]).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                        sudahList.innerHTML += `
+                            <div class="flex items-center justify-between p-3 rounded-2xl border bg-emerald-50 border-emerald-100 transition-all duration-300 animate__animated animate__fadeIn">
+                                <div class="flex items-center gap-3">
+                                    ${getAvatarHtml(name, "w-6 h-6")}
+                                    <div class="flex flex-col">
+                                        <span class="text-[11px] font-bold text-emerald-700">${name}</span>
+                                        <span class="text-[9px] font-bold text-emerald-400 uppercase">${time}</span>
+                                    </div>
+                                </div>
+                                <button onclick="undoPrinsipRead('${name}')" class="text-[9px] font-black text-rose-400 uppercase tracking-widest hover:text-rose-600 transition-colors shrink-0 ml-2">Batal</button>
+                            </div>`;
+                    });
+            }
+
+            // Riwayat siklus selesai (paling baru di atas)
+            riwayatList.innerHTML = '';
+            if(prinsipRiwayat.length === 0) {
+                riwayatList.innerHTML = `<div class="py-6 text-center text-slate-300 font-bold text-[10px] uppercase">Belum Ada Siklus Selesai</div>`;
+            } else {
+                [...prinsipRiwayat].reverse().forEach((cycle, revIdx) => {
+                    const label = new Date(cycle.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    const count = Object.keys(cycle.entries || {}).length;
+                    riwayatList.innerHTML += `
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p class="text-[10px] font-black text-slate-600">${label}</p>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase">${count} orang selesai membaca</p>
+                        </div>`;
+                });
+            }
+        }
+
+        function markPrinsipRead(name) {
+            if(prinsipSudahBaca[name]) return;
+            prinsipSudahBaca[name] = new Date().toISOString();
+
+            const allDone = KARYAWAN_MASTER.every(n => prinsipSudahBaca[n]);
+            if(allDone) {
+                // Arsipkan siklus ini ke riwayat permanen, lalu reset list agar mulai lagi dari awal.
+                // Data siklus sebelumnya tetap ada di prinsipRiwayat.
+                prinsipRiwayat.push({ 
+                    completedAt: new Date().toISOString(), 
+                    entries: { ...prinsipSudahBaca } 
+                });
+                prinsipSudahBaca = {};
+            }
+
+            renderPrinsipKerja();
+            triggerCloudSave();
+        }
+
+        function undoPrinsipRead(name) {
+            delete prinsipSudahBaca[name];
+            renderPrinsipKerja();
+            triggerCloudSave();
         }
 
         window.onload = () => {
