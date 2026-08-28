@@ -125,7 +125,7 @@
         <nav class="max-w-6xl mx-auto px-3 sm:px-4 -mt-8 sm:-mt-10 relative z-20">
             <div class="flex gap-2 overflow-x-auto no-scrollbar sm:flex-wrap sm:justify-center bg-white/80 backdrop-blur-xl p-2 sm:p-3 rounded-[24px] sm:rounded-[35px] shadow-2xl border border-white/50">
                 <button onclick="showTab('rolling')" id="btn-rolling" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs bg-indigo-600 text-white shadow-xl shadow-indigo-200 transition-all uppercase tracking-widest">Rolling</button>
-                <button onclick="showTab('piket')" id="btn-piket" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Piket</button>
+                <button onclick="showTab('piket')" id="btn-piket" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Piket &amp; Laporan</button>
                 <button onclick="showTab('prinsip')" id="btn-prinsip" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Prinsip Kerja</button>
                 <button onclick="showTab('jadwal-kerja')" id="btn-jadwal" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Kalender</button>
                 <button onclick="showTab('settings')" id="btn-settings" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Supabase</button>
@@ -164,8 +164,24 @@
                             </div>
                             <h3 class="text-[10px] font-black uppercase tracking-widest mb-4 opacity-70">Pengganti Manual</h3>
                             <div class="space-y-4 relative z-10">
-                                <input type="text" id="manualInputName" placeholder="Nama Pengganti..." class="w-full p-4 sm:p-5 bg-white/10 border border-white/20 rounded-2xl text-xs font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
+                                <p class="text-[9px] text-white/40 font-bold uppercase tracking-wider leading-relaxed">Tidak masuk daftar Piket / Laporan</p>
+                                <div class="relative">
+                                    <input type="text" id="manualInputName" list="manualNameSuggestions" placeholder="Nama Pengganti..." autocomplete="off" class="w-full p-4 sm:p-5 bg-white/10 border border-white/20 rounded-2xl text-xs font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
+                                    <datalist id="manualNameSuggestions"></datalist>
+                                </div>
                                 <button onclick="addManualPerson()" class="w-full py-4 sm:py-5 bg-white text-indigo-900 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-50 transition-all active:scale-95">TAMBAHKAN</button>
+
+                                <button onclick="toggleManualSuggestManager()" class="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/15 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" /></svg>
+                                    Kelola Daftar Rekomendasi
+                                </button>
+
+                                <div id="manualSuggestManager" class="hidden space-y-3 pt-3 border-t border-white/10">
+                                    <input type="text" id="manualSuggestNameInput" placeholder="Nama..." class="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-[11px] font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
+                                    <input type="text" id="manualSuggestGroupInput" placeholder="Group / Asal (opsional)..." class="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-[11px] font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
+                                    <button onclick="addManualSuggestEntry()" class="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-emerald-600 transition-all active:scale-95">+ Tambah ke Daftar</button>
+                                    <div id="manualSuggestList" class="space-y-2 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -174,6 +190,12 @@
 
             <!-- Piket Section -->
             <section id="piket" class="tab-content">
+                <div class="flex justify-end mb-4 sm:mb-6">
+                    <button onclick="sharePiketDanLaporan()" class="flex items-center gap-2 bg-emerald-600 text-white px-6 py-3.5 sm:px-8 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8.684 13.342a3 3 0 100-2.684m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                        Share Piket &amp; Laporan
+                    </button>
+                </div>
                 <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8">
                     <div class="lg:col-span-3 bg-white rounded-[24px] sm:rounded-[40px] shadow-sm p-5 sm:p-10 border border-slate-100">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-12 gap-4">
@@ -184,6 +206,18 @@
                             <button onclick="resetPiketToday()" class="w-full sm:w-auto text-[10px] font-black text-rose-500 bg-rose-50 px-6 py-3.5 sm:px-8 rounded-2xl hover:bg-rose-100 transition-all uppercase border border-rose-100 tracking-[0.15em] sm:tracking-[0.2em]">Reset Slot Area (Hari Ini)</button>
                         </div>
                         <div id="piketAreaContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8"></div>
+
+                        <!-- Laporan Sub-Section -->
+                        <div class="mt-10 sm:mt-14 pt-8 sm:pt-10 border-t-2 border-dashed border-slate-100">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
+                                <div>
+                                    <h2 class="text-xl sm:text-3xl font-black text-slate-800">Laporan Cleaning</h2>
+                                    <p id="laporanStatusInfo" class="text-[10px] sm:text-[11px] text-emerald-500 font-black uppercase mt-2 tracking-[0.2em] sm:tracking-[0.3em]"></p>
+                                </div>
+                                <button onclick="addLaporanSlot()" class="w-full sm:w-auto text-[10px] font-black text-emerald-600 bg-emerald-50 px-6 py-3.5 sm:px-8 rounded-2xl hover:bg-emerald-100 transition-all uppercase border border-emerald-100 tracking-[0.15em] sm:tracking-[0.2em]">+ Tambah Laporan</button>
+                            </div>
+                            <div id="laporanContainer" class="space-y-3 sm:space-y-4"></div>
+                        </div>
                     </div>
                     
                     <div class="lg:col-span-1">
@@ -322,6 +356,13 @@
         // prinsipSudahBaca: { nama: isoTimestamp } untuk siklus yang sedang berjalan
         // prinsipRiwayat: array of { completedAt: isoTimestamp, entries: { nama: isoTimestamp } } untuk siklus yang sudah selesai (auto-reset)
         let prinsipSudahBaca = {}, prinsipRiwayat = [];
+        // laporanCleaning: { [tanggal]: [ { name, durasi } ] }
+        let laporanCleaning = {};
+        // manualSuggestions: [ { name, group } ] daftar rekomendasi untuk Pengganti Manual
+        let manualSuggestions = [];
+        // Nama-nama yang ditambahkan lewat "Pengganti Manual" (dikecualikan dari Piket & Laporan)
+        let manualAddedNames = [];
+        const DURASI_OPTIONS = ["15 menit", "30 menit", "45 menit", "1 jam", "1.5 jam", "2 jam"];
         
         const getLocalDateString = (date) => date.toLocaleDateString('sv-SE'); 
 
@@ -359,7 +400,7 @@
         function triggerCloudSave() {
             const payload = { 
                 extraHolidays, attendancePiket, customDailyRolling, absentData, karyawanPhotos,
-                prinsipSudahBaca, prinsipRiwayat,
+                prinsipSudahBaca, prinsipRiwayat, laporanCleaning, manualSuggestions, manualAddedNames,
                 cycleBaseDate: document.getElementById('cycleBaseDate').value 
             };
             localStorage.setItem('local_data_v4.8', JSON.stringify(payload));
@@ -397,6 +438,9 @@
                 karyawanPhotos = d.karyawanPhotos || {};
                 prinsipSudahBaca = d.prinsipSudahBaca || {};
                 prinsipRiwayat = d.prinsipRiwayat || [];
+                laporanCleaning = d.laporanCleaning || {};
+                manualSuggestions = d.manualSuggestions || [];
+                manualAddedNames = d.manualAddedNames || [];
                 if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
             }
 
@@ -422,6 +466,9 @@
                         karyawanPhotos = d.karyawanPhotos || karyawanPhotos;
                         prinsipSudahBaca = d.prinsipSudahBaca || prinsipSudahBaca;
                         prinsipRiwayat = d.prinsipRiwayat || prinsipRiwayat;
+                        laporanCleaning = d.laporanCleaning || laporanCleaning;
+                        manualSuggestions = d.manualSuggestions || manualSuggestions;
+                        manualAddedNames = d.manualAddedNames || manualAddedNames;
                         if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
                     }
                     setCloudStatus('SUCCESS');
@@ -433,6 +480,7 @@
                 setCloudStatus('IDLE');
             }
             renderPrinsipKerja();
+            renderManualSuggestUI();
             initSchedules();
         }
 
@@ -612,6 +660,7 @@
             renderPiketArea(); 
             renderAbsentList();
             renderCalendarGrid();
+            renderLaporanArea();
         }
 
         // ROLLING ENGINE
@@ -735,14 +784,69 @@
             if(!data || data.status !== 'ON') return;
 
             const emptyIdx = data.staff.indexOf("--- Kosong ---");
-            const finalName = name + " (G)";
+            const finalName = name;
             if(emptyIdx !== -1) data.staff[emptyIdx] = finalName;
             else data.staff.push(finalName);
+
+            // Tandai nama ini sebagai "manual" agar dikecualikan dari daftar Piket & Laporan
+            if(!manualAddedNames.includes(finalName)) manualAddedNames.push(finalName);
 
             customDailyRolling[selectedViewDate] = [...data.staff];
             input.value = "";
             renderRollingJobs();
             renderPiketArea();
+            renderLaporanArea();
+            triggerCloudSave();
+        }
+
+        // === REKOMENDASI NAMA & GROUP UNTUK PENGGANTI MANUAL ===
+        function toggleManualSuggestManager() {
+            const el = document.getElementById('manualSuggestManager');
+            el.classList.toggle('hidden');
+        }
+
+        function renderManualSuggestUI() {
+            // Datalist untuk autocomplete input nama manual
+            const datalist = document.getElementById('manualNameSuggestions');
+            if(datalist) {
+                datalist.innerHTML = manualSuggestions
+                    .map(s => `<option value="${s.name}">${s.group ? s.group : ''}</option>`)
+                    .join('');
+            }
+
+            // List kelola daftar rekomendasi
+            const listEl = document.getElementById('manualSuggestList');
+            if(!listEl) return;
+            if(manualSuggestions.length === 0) {
+                listEl.innerHTML = `<div class="py-6 text-center text-white/30 font-bold text-[9px] uppercase tracking-widest">Belum Ada Rekomendasi</div>`;
+                return;
+            }
+            listEl.innerHTML = manualSuggestions.map((s, i) => `
+                <div class="flex items-center justify-between p-3 bg-white/10 rounded-xl border border-white/10">
+                    <div class="flex flex-col">
+                        <span class="text-[11px] font-bold">${s.name}</span>
+                        ${s.group ? `<span class="text-[9px] text-white/50 font-bold uppercase tracking-wider">${s.group}</span>` : ''}
+                    </div>
+                    <button onclick="removeManualSuggestEntry(${i})" class="text-[9px] font-black text-rose-300 uppercase tracking-widest hover:text-rose-100 transition-colors shrink-0 ml-2">Hapus</button>
+                </div>`).join('');
+        }
+
+        function addManualSuggestEntry() {
+            const nameInput = document.getElementById('manualSuggestNameInput');
+            const groupInput = document.getElementById('manualSuggestGroupInput');
+            const name = nameInput.value.trim();
+            const group = groupInput.value.trim();
+            if(!name) return;
+            manualSuggestions.push({ name, group });
+            nameInput.value = "";
+            groupInput.value = "";
+            renderManualSuggestUI();
+            triggerCloudSave();
+        }
+
+        function removeManualSuggestEntry(idx) {
+            manualSuggestions.splice(idx, 1);
+            renderManualSuggestUI();
             triggerCloudSave();
         }
 
@@ -761,7 +865,7 @@
 
             const currentAbsents = absentData[selectedViewDate] || [];
             infoText.innerText = `${piketAreas.length} Area Aktif`;
-            const activeStaff = data.staff.filter(n => n !== "--- Kosong ---" && !currentAbsents.includes(n));
+            const activeStaff = data.staff.filter(n => n !== "--- Kosong ---" && !currentAbsents.includes(n) && !manualAddedNames.includes(n));
             renderPiketAttendanceList(activeStaff);
 
             piketAreas.forEach(area => {
@@ -828,6 +932,127 @@
                         `}
                     </div>`;
             });
+        }
+
+        // === LAPORAN CLEANING ENGINE ===
+        function renderLaporanArea() {
+            const container = document.getElementById('laporanContainer');
+            const infoText = document.getElementById('laporanStatusInfo');
+            if(!container || !infoText) return;
+            const data = masterSchedules[selectedViewDate];
+            container.innerHTML = '';
+
+            if(!data || data.status !== 'ON') {
+                infoText.innerText = "Operasional Libur";
+                return;
+            }
+
+            const currentAbsents = absentData[selectedViewDate] || [];
+            const activeStaff = data.staff.filter(n => n !== "--- Kosong ---" && !currentAbsents.includes(n) && !manualAddedNames.includes(n));
+            const entries = laporanCleaning[selectedViewDate] || [];
+            infoText.innerText = `${entries.length} Laporan Tercatat`;
+
+            if(entries.length === 0) {
+                container.innerHTML = `<div class="py-10 text-center border-2 border-dashed border-slate-100 rounded-[24px] text-[10px] text-slate-300 font-bold uppercase tracking-widest">Belum Ada Laporan</div>`;
+                return;
+            }
+
+            entries.forEach((entry, i) => {
+                let nameOpts = activeStaff
+                    .map(n => `<option value="${n}" ${n === entry.name ? 'selected' : ''}>${n}</option>`)
+                    .join('');
+                let durasiOpts = DURASI_OPTIONS
+                    .map(d => `<option value="${d}" ${d === entry.durasi ? 'selected' : ''}>${d}</option>`)
+                    .join('');
+
+                container.innerHTML += `
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 animate__animated animate__fadeIn">
+                        <select onchange="setLaporanField(${i}, 'name', this.value)" class="flex-1 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
+                            <option value="">-- Pilih Nama --</option>
+                            ${nameOpts}
+                        </select>
+                        <select onchange="setLaporanField(${i}, 'durasi', this.value)" class="w-full sm:w-40 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
+                            <option value="">-- Lama --</option>
+                            ${durasiOpts}
+                        </select>
+                        <button onclick="removeLaporanSlot(${i})" class="shrink-0 text-rose-400 p-2 hover:text-rose-600 transition-all self-end sm:self-auto">✕</button>
+                    </div>`;
+            });
+        }
+
+        function addLaporanSlot() {
+            if(!laporanCleaning[selectedViewDate]) laporanCleaning[selectedViewDate] = [];
+            laporanCleaning[selectedViewDate].push({ name: "", durasi: "" });
+            renderLaporanArea();
+            triggerCloudSave();
+        }
+
+        function removeLaporanSlot(idx) {
+            if(laporanCleaning[selectedViewDate]) {
+                laporanCleaning[selectedViewDate].splice(idx, 1);
+                renderLaporanArea();
+                triggerCloudSave();
+            }
+        }
+
+        function setLaporanField(idx, field, val) {
+            if(!laporanCleaning[selectedViewDate]) laporanCleaning[selectedViewDate] = [];
+            if(!laporanCleaning[selectedViewDate][idx]) laporanCleaning[selectedViewDate][idx] = { name: "", durasi: "" };
+            laporanCleaning[selectedViewDate][idx][field] = val;
+            renderLaporanArea();
+            triggerCloudSave();
+        }
+
+        // === SHARE PIKET & LAPORAN ===
+        function buildPiketDanLaporanText() {
+            const parts = k => k.split('-');
+            const p = parts(selectedViewDate);
+            const dObj = new Date(p[0], p[1]-1, p[2]);
+            const label = dObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+            let text = `*PIKET & LAPORAN*\n${label}\n\n`;
+
+            text += `*PEMBAGIAN PIKET*\n`;
+            let hasPiket = false;
+            piketAreas.forEach(area => {
+                const slots = (attendancePiket[selectedViewDate]?.[area.id] || []).filter(n => n);
+                if(slots.length === 0) return;
+                hasPiket = true;
+                text += `\n${area.name}:\n`;
+                slots.forEach(n => { text += `- ${n}\n`; });
+            });
+            if(!hasPiket) text += `(Belum ada slot piket terisi)\n`;
+
+            text += `\n*LAPORAN CLEANING*\n`;
+            const entries = (laporanCleaning[selectedViewDate] || []).filter(e => e.name || e.durasi);
+            if(entries.length === 0) {
+                text += `(Belum ada laporan terisi)\n`;
+            } else {
+                entries.forEach(e => {
+                    text += `- ${e.name || '(nama belum dipilih)'} — ${e.durasi || '(durasi belum dipilih)'}\n`;
+                });
+            }
+
+            return text;
+        }
+
+        async function sharePiketDanLaporan() {
+            const text = buildPiketDanLaporanText();
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'Piket & Laporan', text });
+                    return;
+                } catch(e) {
+                    // Jika user membatalkan share, tidak perlu fallback
+                    if (e.name === 'AbortError') return;
+                }
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('Teks Piket & Laporan disalin ke clipboard (fitur share tidak tersedia di perangkat ini).');
+            } catch(e) {
+                alert(text);
+            }
         }
 
         function addSlot(areaId) {
