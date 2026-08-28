@@ -211,7 +211,7 @@
                         <div class="mt-10 sm:mt-14 pt-8 sm:pt-10 border-t-2 border-dashed border-slate-100">
                             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
                                 <div>
-                                    <h2 class="text-xl sm:text-3xl font-black text-slate-800">Laporan Cleaning</h2>
+                                    <h2 class="text-xl sm:text-3xl font-black text-slate-800">Laporan</h2>
                                     <p id="laporanStatusInfo" class="text-[10px] sm:text-[11px] text-emerald-500 font-black uppercase mt-2 tracking-[0.2em] sm:tracking-[0.3em]"></p>
                                 </div>
                                 <button onclick="addLaporanSlot()" class="w-full sm:w-auto text-[10px] font-black text-emerald-600 bg-emerald-50 px-6 py-3.5 sm:px-8 rounded-2xl hover:bg-emerald-100 transition-all uppercase border border-emerald-100 tracking-[0.15em] sm:tracking-[0.2em]">+ Tambah Laporan</button>
@@ -363,8 +363,67 @@
         // Nama-nama yang ditambahkan lewat "Pengganti Manual" (dikecualikan dari Piket & Laporan)
         let manualAddedNames = [];
         const DURASI_OPTIONS = ["15 menit", "30 menit", "45 menit", "1 jam", "1.5 jam", "2 jam"];
+
+        // Generate dropdown durasi + opsi "Custom..." dengan input teks bebas bila dipilih.
+        // onChangeExpr: ekspresi JS (string) memakai placeholder __VAL__ untuk nilai durasi baru, contoh: "setPiketDurasi('p-out', 0, __VAL__)"
+        function durasiFieldHtml(currentVal, onChangeExpr, selectId) {
+            const isPreset = DURASI_OPTIONS.includes(currentVal);
+            const isCustom = currentVal && !isPreset;
+            let opts = DURASI_OPTIONS
+                .map(d => `<option value="${d}" ${d === currentVal ? 'selected' : ''}>${d}</option>`)
+                .join('');
+            const callWithSelectVal = onChangeExpr.replace(/__VAL__/g, 'this.value');
+            const callWithCustomVal = onChangeExpr.replace(/__VAL__/g, 'this.value');
+            const selectHtml = `
+                <select id="${selectId}" onchange="if(this.value==='__custom__'){ document.getElementById('${selectId}-custom').classList.remove('hidden'); document.getElementById('${selectId}-custom').focus(); } else { ${callWithSelectVal}; }" class="w-full p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                    <option value="">-- Lama --</option>
+                    ${opts}
+                    <option value="__custom__" ${isCustom ? 'selected' : ''}>Custom...</option>
+                </select>`;
+            const customInputHtml = `
+                <input type="text" id="${selectId}-custom" value="${isCustom ? currentVal : ''}" onblur="${callWithCustomVal}" onkeydown="if(event.key==='Enter'){ this.blur(); }" placeholder="Contoh: 20 menit" class="w-full mt-2 p-3 border-2 border-indigo-100 rounded-xl text-[11px] font-bold outline-none bg-indigo-50 focus:bg-white transition-all ${isCustom ? '' : 'hidden'}">`;
+            return `<div class="w-full sm:w-44">${selectHtml}${customInputHtml}</div>`;
+        }
         
         const getLocalDateString = (date) => date.toLocaleDateString('sv-SE'); 
+
+        // Migrasi data lama: hapus suffix " (G)" yang dulu ditambahkan otomatis ke nama Pengganti Manual
+        function stripGSuffix(name) {
+            return typeof name === 'string' ? name.replace(/\s*\(G\)\s*$/i, '').trim() : name;
+        }
+
+        function migrateLegacyGSuffix() {
+            Object.keys(customDailyRolling).forEach(k => {
+                customDailyRolling[k] = (customDailyRolling[k] || []).map(stripGSuffix);
+            });
+            Object.keys(absentData).forEach(k => {
+                absentData[k] = (absentData[k] || []).map(stripGSuffix);
+            });
+            manualAddedNames = manualAddedNames.map(stripGSuffix);
+            if (karyawanPhotos) {
+                const newPhotos = {};
+                Object.keys(karyawanPhotos).forEach(k => { newPhotos[stripGSuffix(k)] = karyawanPhotos[k]; });
+                karyawanPhotos = newPhotos;
+            }
+        }
+
+        // Migrasi struktur slot piket: dari string nama saja -> { name, durasi }
+        function migratePiketSlotsStructure() {
+            Object.keys(attendancePiket).forEach(k => {
+                const areas = attendancePiket[k] || {};
+                Object.keys(areas).forEach(areaId => {
+                    areas[areaId] = (areas[areaId] || []).map(slot => {
+                        if (slot && typeof slot === 'object') {
+                            return { name: stripGSuffix(slot.name || ""), durasi: slot.durasi || "" };
+                        }
+                        return { name: stripGSuffix(slot || ""), durasi: "" };
+                    });
+                });
+            });
+            Object.keys(laporanCleaning).forEach(k => {
+                laporanCleaning[k] = (laporanCleaning[k] || []).map(e => ({ ...e, name: stripGSuffix(e.name) }));
+            });
+        }
 
         let currentDisplayDate = new Date();
         let selectedViewDate = getLocalDateString(new Date());
@@ -481,6 +540,9 @@
             }
             renderPrinsipKerja();
             renderManualSuggestUI();
+            migrateLegacyGSuffix();
+            migratePiketSlotsStructure();
+            triggerCloudSave();
             initSchedules();
         }
 
@@ -529,7 +591,6 @@
                 karyawanPhotos[currentlyEditingPhotoFor] = event.target.result;
                 renderRollingJobs();
                 renderPiketArea();
-                renderPiketAttendanceList(masterSchedules[selectedViewDate]?.staff.filter(n => n !== "--- Kosong ---") || []);
                 triggerCloudSave();
             };
             reader.readAsDataURL(file);
@@ -730,16 +791,31 @@
 
         function markAbsent(idx) {
             const data = masterSchedules[selectedViewDate];
-            if(!absentData[selectedViewDate]) absentData[selectedViewDate] = [];
             const personName = data.staff[idx];
             if(personName === "--- Kosong ---") return;
 
+            // Jika orang ini adalah "Pengganti Manual", tombol silang membatalkan slotnya
+            // (dikosongkan agar bisa diisi pengganti manual lain), BUKAN dicatat sebagai absen.
+            if(manualAddedNames.includes(personName)) {
+                manualAddedNames = manualAddedNames.filter(n => n !== personName);
+                data.staff[idx] = "--- Kosong ---";
+                customDailyRolling[selectedViewDate] = [...data.staff];
+                renderRollingJobs();
+                renderAbsentList();
+                renderPiketArea();
+                renderLaporanArea();
+                triggerCloudSave();
+                return;
+            }
+
+            if(!absentData[selectedViewDate]) absentData[selectedViewDate] = [];
             absentData[selectedViewDate].push(personName);
             data.staff[idx] = "--- Kosong ---";
             customDailyRolling[selectedViewDate] = [...data.staff];
             renderRollingJobs();
             renderAbsentList();
             renderPiketArea(); 
+            renderLaporanArea();
             triggerCloudSave();
         }
 
@@ -773,6 +849,7 @@
             renderRollingJobs();
             renderAbsentList();
             renderPiketArea();
+            renderLaporanArea();
             triggerCloudSave();
         }
 
@@ -874,18 +951,23 @@
                 let slotHtml = '';
                 
                 for(let i=0; i<displayCount; i++) {
-                    const currentVal = savedSlots[i] || "";
+                    const currentSlot = savedSlots[i] || { name: "", durasi: "" };
+                    const currentVal = currentSlot.name || "";
                     let opts = activeStaff
                         .map(n => `<option value="${n}" ${n === currentVal ? 'selected' : ''}>${n}</option>`)
                         .join('');
+                    const selectId = `piket-${area.id}-${i}-durasi`;
                     
                     slotHtml += `
-                        <div class="flex items-center gap-2 mb-3">
-                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="flex-1 p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3">
+                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="w-full flex-1 p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
-                            ${i >= area.defaultSlots ? `<button onclick="removeSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all">✕</button>` : ''}
+                            <div class="w-full sm:w-auto flex items-center gap-2">
+                                ${durasiFieldHtml(currentSlot.durasi || "", `setPiketDurasi('${area.id}', ${i}, __VAL__)`, selectId)}
+                                ${i >= area.defaultSlots ? `<button onclick="removeSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
+                            </div>
                         </div>`;
                 }
                 
@@ -911,7 +993,10 @@
             Object.values(attendancePiket).forEach(dailyData => {
                 PIKET_INDICATOR_AREA_IDS.forEach(areaId => {
                     const slots = dailyData[areaId] || [];
-                    slots.forEach(name => { if(name) everPiketed.add(name); });
+                    slots.forEach(slot => { 
+                        const n = slot && typeof slot === 'object' ? slot.name : slot;
+                        if(n) everPiketed.add(n); 
+                    });
                 });
             });
 
@@ -961,9 +1046,7 @@
                 let nameOpts = activeStaff
                     .map(n => `<option value="${n}" ${n === entry.name ? 'selected' : ''}>${n}</option>`)
                     .join('');
-                let durasiOpts = DURASI_OPTIONS
-                    .map(d => `<option value="${d}" ${d === entry.durasi ? 'selected' : ''}>${d}</option>`)
-                    .join('');
+                const selectId = `laporan-${i}-durasi`;
 
                 container.innerHTML += `
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 animate__animated animate__fadeIn">
@@ -971,10 +1054,7 @@
                             <option value="">-- Pilih Nama --</option>
                             ${nameOpts}
                         </select>
-                        <select onchange="setLaporanField(${i}, 'durasi', this.value)" class="w-full sm:w-40 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
-                            <option value="">-- Lama --</option>
-                            ${durasiOpts}
-                        </select>
+                        ${durasiFieldHtml(entry.durasi || "", `setLaporanField(${i}, 'durasi', __VAL__)`, selectId)}
                         <button onclick="removeLaporanSlot(${i})" class="shrink-0 text-rose-400 p-2 hover:text-rose-600 transition-all self-end sm:self-auto">✕</button>
                     </div>`;
             });
@@ -1015,21 +1095,26 @@
             text += `*PEMBAGIAN PIKET*\n`;
             let hasPiket = false;
             piketAreas.forEach(area => {
-                const slots = (attendancePiket[selectedViewDate]?.[area.id] || []).filter(n => n);
+                const slots = (attendancePiket[selectedViewDate]?.[area.id] || []).filter(s => s && s.name);
                 if(slots.length === 0) return;
                 hasPiket = true;
                 text += `\n${area.name}:\n`;
-                slots.forEach(n => { text += `- ${n}\n`; });
+                slots.forEach(s => { 
+                    const durasiTxt = s.durasi ? ` (*${s.durasi}*)` : '';
+                    text += `- *${s.name}*${durasiTxt}\n`; 
+                });
             });
             if(!hasPiket) text += `(Belum ada slot piket terisi)\n`;
 
-            text += `\n*LAPORAN CLEANING*\n`;
+            text += `\n*LAPORAN*\n`;
             const entries = (laporanCleaning[selectedViewDate] || []).filter(e => e.name || e.durasi);
             if(entries.length === 0) {
                 text += `(Belum ada laporan terisi)\n`;
             } else {
                 entries.forEach(e => {
-                    text += `- ${e.name || '(nama belum dipilih)'} — ${e.durasi || '(durasi belum dipilih)'}\n`;
+                    const nameTxt = e.name ? `*${e.name}*` : '(nama belum dipilih)';
+                    const durasiTxt = e.durasi ? `*${e.durasi}*` : '(durasi belum dipilih)';
+                    text += `- ${nameTxt} — ${durasiTxt}\n`;
                 });
             }
 
@@ -1058,7 +1143,7 @@
         function addSlot(areaId) {
             if(!attendancePiket[selectedViewDate]) attendancePiket[selectedViewDate] = {};
             if(!attendancePiket[selectedViewDate][areaId]) attendancePiket[selectedViewDate][areaId] = [];
-            attendancePiket[selectedViewDate][areaId].push("");
+            attendancePiket[selectedViewDate][areaId].push({ name: "", durasi: "" });
             renderPiketArea(); 
             triggerCloudSave();
         }
@@ -1074,7 +1159,17 @@
         function setPiket(id, i, val) {
             if(!attendancePiket[selectedViewDate]) attendancePiket[selectedViewDate] = {};
             if(!attendancePiket[selectedViewDate][id]) attendancePiket[selectedViewDate][id] = [];
-            attendancePiket[selectedViewDate][id][i] = val; 
+            if(!attendancePiket[selectedViewDate][id][i]) attendancePiket[selectedViewDate][id][i] = { name: "", durasi: "" };
+            attendancePiket[selectedViewDate][id][i].name = val; 
+            renderPiketArea(); 
+            triggerCloudSave();
+        }
+
+        function setPiketDurasi(id, i, val) {
+            if(!attendancePiket[selectedViewDate]) attendancePiket[selectedViewDate] = {};
+            if(!attendancePiket[selectedViewDate][id]) attendancePiket[selectedViewDate][id] = [];
+            if(!attendancePiket[selectedViewDate][id][i]) attendancePiket[selectedViewDate][id][i] = { name: "", durasi: "" };
+            attendancePiket[selectedViewDate][id][i].durasi = val; 
             renderPiketArea(); 
             triggerCloudSave();
         }
