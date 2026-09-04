@@ -987,12 +987,12 @@
                     const selectId = `piket-${area.id}-${i}-durasi`;
                     
                     slotHtml += `
-                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3">
-                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full flex-1 p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                        <div class="flex flex-col gap-2 mb-3">
+                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
-                            <div class="w-full sm:w-auto flex items-center gap-2">
+                            <div class="w-full flex items-center gap-2">
                                 ${durasiFieldHtml(currentSlot.durasi || "", `setPiketDurasi('${area.id}', ${i}, __VAL__)`, selectId)}
                                 ${i >= area.defaultSlots ? `<button onclick="removeSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
                             </div>
@@ -1015,23 +1015,52 @@
         // mempengaruhi status hijau/abu-abu di panel Status Indikator Piket.
         const PIKET_INDICATOR_AREA_IDS = ['p-out'];
 
+        // Cek apakah seorang nama tercatat piket (di area indikator) pada tanggal tertentu.
+        function wasPiketedOn(dateStr, name) {
+            const dailyData = attendancePiket[dateStr];
+            if(!dailyData) return false;
+            return PIKET_INDICATOR_AREA_IDS.some(areaId => {
+                const slots = dailyData[areaId] || [];
+                return slots.some(slot => {
+                    const n = slot && typeof slot === 'object' ? slot.name : slot;
+                    return n === name;
+                });
+            });
+        }
+
+        // Hitung streak piket beruntun (dalam hari kerja/ON) untuk seorang nama, dihitung
+        // mundur mulai dari tanggal yang sedang dilihat (selectedViewDate). Jika hari ini
+        // piket dan besoknya (hari kerja berikutnya) juga piket, indikator menjadi 2, dst.
+        // Streak berhenti begitu ditemukan hari kerja tanpa piket untuk nama tsb.
+        function getPiketStreak(name) {
+            let streak = 0;
+            let cursor = new Date(selectedViewDate + 'T00:00:00');
+            let guard = 0; // batas pengaman agar tidak infinite loop
+            while(guard < 366) {
+                guard++;
+                const dStr = getLocalDateString(cursor);
+                const sched = masterSchedules[dStr];
+                if(sched && sched.status === 'ON') {
+                    if(wasPiketedOn(dStr, name)) {
+                        streak++;
+                    } else {
+                        break;
+                    }
+                }
+                // mundur satu hari kalender, lewati hari yang bukan status ON tanpa menghentikan streak
+                cursor.setDate(cursor.getDate() - 1);
+                if(!sched) break; // tidak ada jadwal terdefinisi lagi, hentikan pencarian
+            }
+            return streak;
+        }
+
         function renderPiketAttendanceList(staff) {
             const listContainer = document.getElementById('piketAttendanceList');
             listContainer.innerHTML = '';
 
-            const everPiketed = new Set();
-            Object.values(attendancePiket).forEach(dailyData => {
-                PIKET_INDICATOR_AREA_IDS.forEach(areaId => {
-                    const slots = dailyData[areaId] || [];
-                    slots.forEach(slot => { 
-                        const n = slot && typeof slot === 'object' ? slot.name : slot;
-                        if(n) everPiketed.add(n); 
-                    });
-                });
-            });
-
             staff.forEach(name => {
-                const isDone = everPiketed.has(name);
+                const streak = getPiketStreak(name);
+                const isDone = streak > 0;
                 listContainer.innerHTML += `
                     <div class="flex items-center justify-between p-3 rounded-2xl border ${isDone ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'} transition-all duration-300">
                         <div class="flex items-center gap-3">
@@ -1039,7 +1068,8 @@
                             <span class="text-[11px] font-bold ${isDone ? 'text-emerald-700' : 'text-slate-600'}">${name}</span>
                         </div>
                         ${isDone ? `
-                            <div class="bg-emerald-500 rounded-full p-1 shadow-lg shadow-emerald-100 animate__animated animate__bounceIn">
+                            <div class="flex items-center gap-1 bg-emerald-500 rounded-full pl-2 pr-1.5 py-1 shadow-lg shadow-emerald-100 animate__animated animate__bounceIn">
+                                <span class="text-[10px] font-black text-white leading-none">${streak}</span>
                                 <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"/></svg>
                             </div>
                         ` : `
@@ -1079,13 +1109,15 @@
                 const selectId = `laporan-${i}-durasi`;
 
                 container.innerHTML += `
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 animate__animated animate__fadeIn">
-                        <select onchange="setLaporanField(${i}, 'name', this.value)" class="name-select flex-1 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
+                    <div class="flex flex-col gap-2 p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 animate__animated animate__fadeIn">
+                        <select onchange="setLaporanField(${i}, 'name', this.value)" class="name-select w-full p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
                             <option value="">-- Pilih Nama --</option>
                             ${nameOpts}
                         </select>
-                        ${durasiFieldHtml(entry.durasi || "", `setLaporanField(${i}, 'durasi', __VAL__)`, selectId)}
-                        <button onclick="removeLaporanSlot(${i})" class="shrink-0 text-rose-400 p-2 hover:text-rose-600 transition-all self-end sm:self-auto">✕</button>
+                        <div class="w-full flex items-center gap-2">
+                            ${durasiFieldHtml(entry.durasi || "", `setLaporanField(${i}, 'durasi', __VAL__)`, selectId)}
+                            <button onclick="removeLaporanSlot(${i})" class="shrink-0 text-rose-400 p-2 hover:text-rose-600 transition-all">✕</button>
+                        </div>
                     </div>`;
             });
         }
