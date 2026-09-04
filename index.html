@@ -26,12 +26,25 @@
         }
 
         .card-gradient { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
-        
-        .selected-person { 
-            background-color: #6366f1 !important; color: white !important; 
-            transform: scale(1.02); box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
-            border-color: #4f46e5 !important;
+
+        /* Select nama (piket, rolling, laporan): panah custom + warna teks eksplisit
+           supaya nilai yang sudah dipilih selalu terlihat, termasuk di desktop/PC. */
+        .name-select {
+            color: #1e293b;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 14px;
+            padding-right: 38px;
         }
+        .name-select option { color: #1e293b; background-color: #ffffff; }
+
+        /* Dropdown pengganti klik-untuk-tukar posisi pada Rolling. Sengaja tanpa
+           efek scale/shadow berlebih -- transisi warna border saja (dinormalkan). */
+        .rolling-select {
+            transition: border-color 0.15s ease, background-color 0.15s ease;
+        }
+        .rolling-select:focus { border-color: #6366f1; background-color: #ffffff; }
 
         .day-card { min-height: 52px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #e2e8f0; position: relative; user-select: none; font-size: 11px; }
         @media (min-width: 640px) {
@@ -225,7 +238,7 @@
                             <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2 flex items-center gap-2">
                                 <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span> Status Indikator Piket
                             </h3>
-                            <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-6">Dihitung dari Area Outline saja</p>
+                            <p class="text-[9px] text-rose-500 font-black uppercase tracking-wider mb-6">Kalkulasi khusus Area Outline saja</p>
                             <div id="piketAttendanceList" class="space-y-3 max-h-[300px] sm:max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                             </div>
                             
@@ -375,7 +388,7 @@
             const callWithSelectVal = onChangeExpr.replace(/__VAL__/g, 'this.value');
             const callWithCustomVal = onChangeExpr.replace(/__VAL__/g, 'this.value');
             const selectHtml = `
-                <select id="${selectId}" onchange="if(this.value==='__custom__'){ document.getElementById('${selectId}-custom').classList.remove('hidden'); document.getElementById('${selectId}-custom').focus(); } else { ${callWithSelectVal}; }" class="w-full p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                <select id="${selectId}" onchange="if(this.value==='__custom__'){ document.getElementById('${selectId}-custom').classList.remove('hidden'); document.getElementById('${selectId}-custom').focus(); } else { ${callWithSelectVal}; }" class="name-select w-full p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
                     <option value="">-- Lama --</option>
                     ${opts}
                     <option value="__custom__" ${isCustom ? 'selected' : ''}>Custom...</option>
@@ -386,6 +399,16 @@
         }
         
         const getLocalDateString = (date) => date.toLocaleDateString('sv-SE'); 
+
+        // Escape untuk atribut HTML (value="...") agar nama dengan tanda kutip/karakter
+        // khusus tidak merusak markup dan menyebabkan opsi gagal ter-set/ter-pilih.
+        function escAttr(str) {
+            return String(str ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
 
         // Migrasi data lama: hapus suffix " (G)" yang dulu ditambahkan otomatis ke nama Pengganti Manual
         function stripGSuffix(name) {
@@ -427,7 +450,6 @@
 
         let currentDisplayDate = new Date();
         let selectedViewDate = getLocalDateString(new Date());
-        let firstSelectionIdx = null;
 
         // SUPABASE CONFIG
         let supabaseUrl = localStorage.getItem('sb_url') || "";
@@ -735,23 +757,32 @@
                 return; 
             }
 
+            // Semua slot posisi (di seluruh grup) dipakai sebagai opsi tukar untuk tiap dropdown.
+            const allSlots = data.staff.map((n, i) => ({ idx: i, name: n }));
+
             let idx = 0;
-            jobGroups.forEach((g, groupIdx) => {
+            jobGroups.forEach((g) => {
                 const members = data.staff.slice(idx, idx + g.count);
                 const startIdx = idx;
-                let items = members.map((n, i) => `
-                    <div class="flex gap-2 mb-3 group/person">
-                        <div onclick="handleSwap(${startIdx+i})" class="flex-1 p-3 rounded-2xl border-2 transition-all cursor-pointer text-[12px] font-extrabold flex items-center gap-3 ${firstSelectionIdx === (startIdx+i) ? 'selected-person' : 'bg-white border-slate-50 hover:border-indigo-100 hover:shadow-md'}">
-                            ${getAvatarHtml(n)}
-                            <span class="truncate pr-2">${n}</span>
-                        </div>
-                        <button onclick="markAbsent(${startIdx+i})" class="p-3 bg-rose-50 text-rose-400 rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                let items = members.map((n, i) => {
+                    const slotIdx = startIdx + i;
+                    let opts = allSlots
+                        .map(s => `<option value="${s.idx}" ${s.idx === slotIdx ? 'selected' : ''}>${escAttr(s.name)}</option>`)
+                        .join('');
+                    return `
+                    <div class="flex gap-2 mb-3 items-center">
+                        ${getAvatarHtml(n)}
+                        <select onchange="swapBySelect(${slotIdx}, this.value)" class="name-select rolling-select flex-1 p-3 rounded-2xl border-2 border-slate-50 bg-white text-[12px] font-extrabold outline-none cursor-pointer">
+                            ${opts}
+                        </select>
+                        <button onclick="markAbsent(${slotIdx})" class="p-3 bg-rose-50 text-rose-400 rounded-2xl hover:bg-rose-500 hover:text-white transition-colors shadow-sm shrink-0">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
-                    </div>`).join('');
+                    </div>`;
+                }).join('');
                 
                 container.innerHTML += `
-                    <div class="p-4 sm:p-6 bg-slate-50 rounded-[24px] sm:rounded-[35px] border border-slate-100 group animate__animated animate__fadeInUp" style="animation-delay: ${groupIdx * 50}ms">
+                    <div class="p-4 sm:p-6 bg-slate-50 rounded-[24px] sm:rounded-[35px] border border-slate-100 group">
                         <h3 class="text-[10px] font-black uppercase text-indigo-500 mb-5 tracking-[0.2em] flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full ${g.color} shadow-lg shadow-indigo-200"></span> ${g.name}
                         </h3>
@@ -761,21 +792,18 @@
             });
         }
 
-        function handleSwap(i) {
+        // Menukar posisi staf di slot `i` dengan staf di slot `targetIdx` (dipilih dari dropdown).
+        // Menggantikan mekanisme klik-dua-kartu sebelumnya, fungsinya sama: tukar posisi.
+        function swapBySelect(i, targetValue) {
             const data = masterSchedules[selectedViewDate];
-            if(firstSelectionIdx === null) { 
-                if(data.staff[i] === "--- Kosong ---") return;
-                firstSelectionIdx = i; 
-                renderRollingJobs(); 
-            } 
-            else {
-                [data.staff[firstSelectionIdx], data.staff[i]] = [data.staff[i], data.staff[firstSelectionIdx]];
-                customDailyRolling[selectedViewDate] = [...data.staff];
-                firstSelectionIdx = null; 
-                renderRollingJobs(); 
-                renderPiketArea(); 
-                triggerCloudSave();
-            }
+            const targetIdx = parseInt(targetValue, 10);
+            if (isNaN(targetIdx) || targetIdx === i) { renderRollingJobs(); return; }
+
+            [data.staff[i], data.staff[targetIdx]] = [data.staff[targetIdx], data.staff[i]];
+            customDailyRolling[selectedViewDate] = [...data.staff];
+            renderRollingJobs();
+            renderPiketArea();
+            triggerCloudSave();
         }
 
         function shuffleJobs() {
@@ -954,13 +982,13 @@
                     const currentSlot = savedSlots[i] || { name: "", durasi: "" };
                     const currentVal = currentSlot.name || "";
                     let opts = activeStaff
-                        .map(n => `<option value="${n}" ${n === currentVal ? 'selected' : ''}>${n}</option>`)
+                        .map(n => `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}>${n}</option>`)
                         .join('');
                     const selectId = `piket-${area.id}-${i}-durasi`;
                     
                     slotHtml += `
                         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3">
-                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="w-full flex-1 p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full flex-1 p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
@@ -982,7 +1010,9 @@
             });
         }
 
-        // Hanya area dengan id ini yang dihitung sebagai "sudah piket" untuk indikator hijau
+        // Indikator "Status Piket" HANYA dihitung dari area Outline (p-out).
+        // Isian di area Cleaning NC, Cleaning Conveyor, Gasleak, Dek Atas TIDAK
+        // mempengaruhi status hijau/abu-abu di panel Status Indikator Piket.
         const PIKET_INDICATOR_AREA_IDS = ['p-out'];
 
         function renderPiketAttendanceList(staff) {
@@ -1044,13 +1074,13 @@
 
             entries.forEach((entry, i) => {
                 let nameOpts = activeStaff
-                    .map(n => `<option value="${n}" ${n === entry.name ? 'selected' : ''}>${n}</option>`)
+                    .map(n => `<option value="${escAttr(n)}" ${n === entry.name ? 'selected' : ''}>${n}</option>`)
                     .join('');
                 const selectId = `laporan-${i}-durasi`;
 
                 container.innerHTML += `
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 animate__animated animate__fadeIn">
-                        <select onchange="setLaporanField(${i}, 'name', this.value)" class="flex-1 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
+                        <select onchange="setLaporanField(${i}, 'name', this.value)" class="name-select flex-1 p-3 sm:p-4 border-2 border-slate-100 rounded-xl text-[11px] font-bold outline-none bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
                             <option value="">-- Pilih Nama --</option>
                             ${nameOpts}
                         </select>
