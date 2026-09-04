@@ -1028,28 +1028,41 @@
             });
         }
 
-        // Hitung streak piket beruntun (dalam hari kerja/ON) untuk seorang nama, dihitung
-        // mundur mulai dari tanggal yang sedang dilihat (selectedViewDate). Jika hari ini
-        // piket dan besoknya (hari kerja berikutnya) juga piket, indikator menjadi 2, dst.
-        // Streak berhenti begitu ditemukan hari kerja tanpa piket untuk nama tsb.
+        // Hitung streak piket beruntun (dalam hari kerja/ON) untuk seorang nama. Status
+        // "sudah piket" tetap terlihat sampai hari kerja BERIKUTNYA (next day), bukan cuma
+        // di hari itu saja -- jadi kalau piket hari ini, saat dibuka besok masih tampil
+        // sebagai sudah piket (carry-over 1 hari kerja), baru hilang kalau 2 hari kerja
+        // berturut-turut (hari ini & kemarin) sama-sama tidak piket.
         function getPiketStreak(name) {
-            let streak = 0;
+            // Kumpulkan tanggal-tanggal hari kerja (status ON) yang <= selectedViewDate,
+            // diurutkan dari yang paling baru ke yang paling lama, sampai batas wajar.
+            const onDays = [];
             let cursor = new Date(selectedViewDate + 'T00:00:00');
-            let guard = 0; // batas pengaman agar tidak infinite loop
-            while(guard < 366) {
+            let guard = 0;
+            while(guard < 366 && onDays.length < 60) {
                 guard++;
                 const dStr = getLocalDateString(cursor);
                 const sched = masterSchedules[dStr];
-                if(sched && sched.status === 'ON') {
-                    if(wasPiketedOn(dStr, name)) {
-                        streak++;
-                    } else {
-                        break;
-                    }
-                }
-                // mundur satu hari kalender, lewati hari yang bukan status ON tanpa menghentikan streak
-                cursor.setDate(cursor.getDate() - 1);
                 if(!sched) break; // tidak ada jadwal terdefinisi lagi, hentikan pencarian
+                if(sched.status === 'ON') onDays.push(dStr);
+                cursor.setDate(cursor.getDate() - 1);
+            }
+
+            // Cari dari hari kerja terbaru (selectedViewDate atau sebelumnya) mundur:
+            // begitu ketemu hari kerja yang piket, mulai hitung streak beruntun dari situ.
+            // Kalau hari kerja pertama yang piket bukan hari ini (selectedViewDate) sendiri,
+            // hanya diperbolehkan "melompat" maksimal 1 hari kerja ke belakang (carry-over).
+            let startIdx = -1;
+            for(let i = 0; i < onDays.length; i++) {
+                if(wasPiketedOn(onDays[i], name)) { startIdx = i; break; }
+                if(i >= 1) break; // sudah lewat carry-over 1 hari, berhenti cari
+            }
+            if(startIdx === -1) return 0;
+
+            let streak = 1;
+            for(let i = startIdx + 1; i < onDays.length; i++) {
+                if(wasPiketedOn(onDays[i], name)) streak++;
+                else break;
             }
             return streak;
         }
