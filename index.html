@@ -367,11 +367,12 @@
             { id: "p-cv", name: "Cleaning Conveyor", color: "border-emerald-500", defaultSlots: 2 },
             { id: "p-gas", name: "Gasleak", color: "border-orange-500", defaultSlots: 1 },
             { id: "p-dek", name: "Area Dek Atas", color: "border-purple-500", defaultSlots: 1 },
-            { id: "p-out", name: "Outline", color: "border-rose-500", defaultSlots: 2 }
+            { id: "p-out", name: "Outline", color: "border-rose-500", defaultSlots: 2 },
+            // Laporan sekarang jadi job/area piket biasa -- sejajar & tidak dibedakan tampilannya
+            // dari Cleaning NC/Conveyor/dst. isLaporan:true hanya menentukan ia menyimpan datanya
+            // ke laporanCleaning (bukan attendancePiket), murni soal penyimpanan data, bukan tampilan.
+            { id: "p-lap", name: "Laporan Cleaning", color: "border-teal-500", defaultSlots: 1, isLaporan: true }
         ];
-
-        // Laporan tidak lagi punya daftar area sendiri -- sekarang menyatu di dalam card
-        // Piket (piketAreas), memakai area.id yang sama, supaya tidak terpisah dari job piket.
 
         let extraHolidays = [], attendancePiket = {}, customDailyRolling = {}, absentData = {}, masterSchedules = {}, karyawanPhotos = {};
         // prinsipSudahBaca: { nama: isoTimestamp } untuk siklus yang sedang berjalan
@@ -443,20 +444,27 @@
             });
         }
 
-        // Migrasi struktur laporan: dari array datar (versi lama) atau dari area laporan terpisah
-        // (versi sebelumnya, area id "l-clean") -> object per-area { [piketAreaId]: [ {name, durasi} ] },
-        // sekarang menyatu langsung dengan piketAreas (Laporan tidak lagi punya daftar area sendiri).
+        // Migrasi struktur laporan lama -> object per-area { [areaId]: [ {name, durasi} ] }.
+        // Data lama (array datar, atau area terpisah "l-clean", atau sempat tercampur ke "p-nc"
+        // saat sub-section digabung ke card) semuanya dipindahkan ke area "Laporan Cleaning" (p-lap),
+        // yang sekarang jadi job/area piket tersendiri lagi -- sejajar dengan job cleaning lain.
         function migrateLaporanDayToAreas(dayData) {
-            const defaultAreaId = piketAreas[0]?.id || "p-nc";
+            const defaultAreaId = piketAreas.find(a => a.isLaporan)?.id || "p-lap";
             if (Array.isArray(dayData)) {
                 return { [defaultAreaId]: dayData.map(e => ({ name: stripGSuffix(e.name), durasi: e.durasi || "" })) };
             }
             const obj = dayData && typeof dayData === 'object' ? { ...dayData } : {};
-            // Data lama dari area Laporan terpisah "l-clean" dipindahkan ke area piket pertama.
-            if (obj['l-clean'] && !obj[defaultAreaId]) {
-                obj[defaultAreaId] = obj['l-clean'];
-                delete obj['l-clean'];
-            }
+            // Data lama dari area/id sebelumnya ("l-clean" versi terpisah, atau "p-nc" versi sub-section
+            // yang sempat digabung) dipindahkan ke area Laporan Cleaning yang baru, tanpa menimpa data
+            // yang sudah ada di sana.
+            ['l-clean', 'p-nc'].forEach(legacyId => {
+                if (obj[legacyId] && obj[legacyId].length) {
+                    obj[defaultAreaId] = [...(obj[defaultAreaId] || []), ...obj[legacyId]];
+                    delete obj[legacyId];
+                } else if (obj[legacyId]) {
+                    delete obj[legacyId];
+                }
+            });
             Object.keys(obj).forEach(areaId => {
                 obj[areaId] = (obj[areaId] || []).map(e => ({ name: stripGSuffix(e.name), durasi: e.durasi || "" }));
             });
@@ -783,8 +791,14 @@
 
             // Semua slot posisi (di seluruh grup) dipakai sebagai opsi tukar untuk tiap dropdown.
             const allSlots = data.staff.map((n, i) => ({ idx: i, name: n }));
-            // Daftar nama pengganti (dari "Kelola Daftar Rekomendasi") untuk mengisi slot yang kosong.
-            const penggantiNames = manualSuggestions.map(s => s.name);
+            // Daftar nama pengganti (dari "Kelola Daftar Rekomendasi"), dikelompokkan per Group (B/C/dst)
+            // untuk mengisi slot yang kosong.
+            const penggantiByGroup = {};
+            manualSuggestions.forEach(s => {
+                const g = (s.group || '').trim() || 'Lainnya';
+                if(!penggantiByGroup[g]) penggantiByGroup[g] = [];
+                penggantiByGroup[g].push(s.name);
+            });
 
             let idx = 0;
             jobGroups.forEach((g) => {
@@ -796,12 +810,14 @@
                     let opts = allSlots
                         .map(s => `<option value="pos:${s.idx}" ${!isEmpty && s.idx === slotIdx ? 'selected' : ''}>${escAttr(s.name)}</option>`)
                         .join('');
-                    // Jika slot kosong, tambahkan daftar Pengganti sebagai opsi langsung isi slot ini.
+                    // Jika slot kosong, tambahkan daftar Pengganti (dikelompokkan per Group) sebagai opsi langsung isi slot ini.
                     let penggantiOpts = '';
-                    if(isEmpty && penggantiNames.length) {
-                        penggantiOpts = `<optgroup label="Daftar Pengganti">` +
-                            penggantiNames.map(pn => `<option value="pengganti:${escAttr(pn)}">${escAttr(pn)}</option>`).join('') +
-                            `</optgroup>`;
+                    if(isEmpty) {
+                        penggantiOpts = Object.keys(penggantiByGroup).map(g2 =>
+                            `<optgroup label="Group ${escAttr(g2)}">` +
+                            penggantiByGroup[g2].map(pn => `<option value="pengganti:${escAttr(pn)}">${escAttr(pn)}</option>`).join('') +
+                            `</optgroup>`
+                        ).join('');
                     }
                     return `
                     <div class="flex gap-2 mb-3 items-center">
@@ -992,9 +1008,9 @@
                 container.innerHTML = `<div class="py-14 text-center border-2 border-dashed border-slate-100 rounded-[30px] text-[10px] text-slate-300 font-bold uppercase tracking-widest">Hadir Semua</div>`;
                 return;
             }
-            const penggantiOpts = manualSuggestions
-                .map(s => `<option value="${escAttr(s.name)}">${escAttr(s.name)}${s.group ? ' (' + escAttr(s.group) + ')' : ''}</option>`)
-                .join('');
+            // Daftar Group unik dari manualSuggestions (mis. "B", "C"), untuk langkah pertama dropdown.
+            const groups = [...new Set(manualSuggestions.map(s => (s.group || '').trim()).filter(Boolean))];
+            const groupOpts = groups.map(g => `<option value="${escAttr(g)}">Group ${escAttr(g)}</option>`).join('');
             list.forEach((name, i) => {
                 container.innerHTML += `
                     <div class="flex flex-col gap-3 p-4 bg-rose-50 rounded-2xl border border-rose-100 group animate__animated animate__fadeInRight">
@@ -1005,12 +1021,28 @@
                             </div>
                             <button onclick="restoreAbsent(${i})" class="text-[9px] font-black text-rose-400 uppercase tracking-widest hover:text-rose-600 transition-colors shrink-0">Batal</button>
                         </div>
-                        <select onchange="fillAbsentWithPengganti(${i}, this.value)" class="name-select w-full p-3 rounded-xl border-2 border-rose-100 bg-white text-[11px] font-bold outline-none cursor-pointer">
-                            <option value="" selected disabled>-- Pilih Pengganti --</option>
-                            ${penggantiOpts}
-                        </select>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="absentGroupSelect-${i}" onchange="renderPenggantiNameOptions(${i})" class="name-select w-full p-3 rounded-xl border-2 border-rose-100 bg-white text-[11px] font-bold outline-none cursor-pointer">
+                                <option value="" selected disabled>-- Pilih Group --</option>
+                                ${groupOpts}
+                            </select>
+                            <select id="absentNameSelect-${i}" onchange="fillAbsentWithPengganti(${i}, this.value)" class="name-select w-full p-3 rounded-xl border-2 border-rose-100 bg-white text-[11px] font-bold outline-none cursor-pointer" disabled>
+                                <option value="" selected disabled>-- Pilih Group Dulu --</option>
+                            </select>
+                        </div>
                     </div>`;
             });
+        }
+
+        // Langkah kedua: isi dropdown nama pengganti sesuai Group yang dipilih di dropdown pertama.
+        function renderPenggantiNameOptions(i) {
+            const groupSelect = document.getElementById(`absentGroupSelect-${i}`);
+            const nameSelect = document.getElementById(`absentNameSelect-${i}`);
+            const chosenGroup = groupSelect.value;
+            const names = manualSuggestions.filter(s => (s.group || '').trim() === chosenGroup);
+            nameSelect.disabled = false;
+            nameSelect.innerHTML = `<option value="" selected disabled>-- Pilih Pengganti --</option>` +
+                names.map(s => `<option value="${escAttr(s.name)}">${escAttr(s.name)}</option>`).join('');
         }
 
         // Isi slot yang ditinggal kosong oleh orang absen ke-`idx` dengan nama dari Daftar
@@ -1135,8 +1167,14 @@
             renderPiketAttendanceList(activeStaff);
 
             piketAreas.forEach(area => {
-                const savedSlots = attendancePiket[selectedViewDate]?.[area.id] || [];
+                // Job "Laporan Cleaning" (isLaporan:true) simpan datanya ke laporanCleaning,
+                // job piket lain ke attendancePiket -- tapi tampilannya (card, slot, tombol) identik.
+                const dataStore = area.isLaporan ? laporanCleaning : attendancePiket;
+                const savedSlots = dataStore[selectedViewDate]?.[area.id] || [];
                 const displayCount = Math.max(area.defaultSlots, savedSlots.length);
+                const setFieldFn = area.isLaporan ? 'setLaporanField' : 'setPiket';
+                const setDurasiFn = area.isLaporan ? 'setLaporanField' : 'setPiketDurasi';
+                const removeFn = area.isLaporan ? 'removeLaporanSlot' : 'removeSlot';
                 let slotHtml = '';
                 
                 for(let i=0; i<displayCount; i++) {
@@ -1146,61 +1184,37 @@
                         .map(n => `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}>${n}</option>`)
                         .join('');
                     const selectId = `piket-${area.id}-${i}-durasi`;
+                    const nameOnChange = area.isLaporan
+                        ? `setLaporanField('${area.id}', ${i}, 'name', this.value)`
+                        : `setPiket('${area.id}', ${i}, this.value)`;
+                    const durasiOnChange = area.isLaporan
+                        ? `setLaporanField('${area.id}', ${i}, 'durasi', __VAL__)`
+                        : `setPiketDurasi('${area.id}', ${i}, __VAL__)`;
                     
                     slotHtml += `
                         <div class="flex flex-col gap-2 mb-3">
-                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                            <select onchange="${nameOnChange}" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
                             <div class="w-full flex items-center gap-2">
-                                ${durasiFieldHtml(currentSlot.durasi || "", `setPiketDurasi('${area.id}', ${i}, __VAL__)`, selectId)}
-                                ${i >= area.defaultSlots ? `<button onclick="removeSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
-                            </div>
-                        </div>`;
-                }
-
-                // Sub-section Laporan -- pakai area.id yang sama dengan Piket, jadi laporan
-                // tidak lagi terpisah tapi menyatu di dalam card job/area yang sama.
-                const laporanEntries = (laporanCleaning[selectedViewDate]?.[area.id]) || [];
-                const laporanDisplayCount = Math.max(1, laporanEntries.length);
-                let laporanHtml = '';
-                for(let i=0; i<laporanDisplayCount; i++) {
-                    const entry = laporanEntries[i] || { name: "", durasi: "" };
-                    let nameOpts = activeStaff
-                        .map(n => `<option value="${escAttr(n)}" ${n === entry.name ? 'selected' : ''}>${n}</option>`)
-                        .join('');
-                    const selectId = `laporan-${area.id}-${i}-durasi`;
-                    laporanHtml += `
-                        <div class="flex flex-col gap-2 mb-3">
-                            <select onchange="setLaporanField('${area.id}', ${i}, 'name', this.value)" class="name-select w-full p-4 border-2 border-emerald-50 rounded-2xl text-[11px] font-bold outline-none bg-emerald-50/50 focus:bg-white focus:border-emerald-200 transition-all appearance-none cursor-pointer">
-                                <option value="">-- Pilih --</option>
-                                ${nameOpts}
-                            </select>
-                            <div class="w-full flex items-center gap-2">
-                                ${durasiFieldHtml(entry.durasi || "", `setLaporanField('${area.id}', ${i}, 'durasi', __VAL__)`, selectId)}
-                                ${i >= 1 ? `<button onclick="removeLaporanSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
+                                ${durasiFieldHtml(currentSlot.durasi || "", durasiOnChange, selectId)}
+                                ${i >= area.defaultSlots ? `<button onclick="${removeFn}('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
                             </div>
                         </div>`;
                 }
                 
+                const addSlotFn = area.isLaporan ? 'addLaporanSlot' : 'addSlot';
                 container.innerHTML += `
                     <div class="area-card p-5 sm:p-8 bg-white shadow-sm border border-slate-100 animate__animated animate__fadeIn">
                         <div class="flex justify-between items-center mb-6">
                             <h4 class="text-sm font-black text-slate-800 uppercase tracking-widest">${area.name}</h4>
                             <div class="flex items-center gap-1">
-                                <button onclick="addSlot('${area.id}')" class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all">+ SLOT</button>
+                                <button onclick="${addSlotFn}('${area.id}')" class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all">+ SLOT</button>
                                 ${area.custom ? `<button onclick="deletePiketArea('${area.id}')" class="text-[9px] font-black text-rose-400 bg-rose-50 px-3 py-1.5 rounded-xl hover:bg-rose-500 hover:text-white transition-all">Hapus</button>` : ''}
                             </div>
                         </div>
                         ${slotHtml}
-                        <div class="mt-5 pt-5 border-t-2 border-dashed border-slate-100">
-                            <div class="flex justify-between items-center mb-3">
-                                <h5 class="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Laporan</h5>
-                                <button onclick="addLaporanSlot('${area.id}')" class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl hover:bg-emerald-600 hover:text-white transition-all">+ SLOT</button>
-                            </div>
-                            ${laporanHtml}
-                        </div>
                     </div>`;
             });
         }
@@ -1217,7 +1231,7 @@
         }
 
         function deletePiketArea(areaId) {
-            if(!confirm('Hapus area/job piket ini beserta semua isian Piket & Laporan-nya?')) return;
+            if(!confirm('Hapus job/area ini beserta semua isiannya?')) return;
             piketAreas = piketAreas.filter(a => a.id !== areaId);
             Object.keys(attendancePiket).forEach(dateKey => { delete attendancePiket[dateKey][areaId]; });
             Object.keys(laporanCleaning).forEach(dateKey => { delete laporanCleaning[dateKey][areaId]; });
@@ -1327,31 +1341,20 @@
 
             let text = `*PIKET & LAPORAN*\n${label}\n`;
 
-            const laporanDayData = laporanCleaning[selectedViewDate] || {};
             let hasAny = false;
             piketAreas.forEach(area => {
-                const piketSlots = (attendancePiket[selectedViewDate]?.[area.id] || []).filter(s => s && s.name);
-                const laporanEntries = (laporanDayData[area.id] || []).filter(e => e.name || e.durasi);
-                if(piketSlots.length === 0 && laporanEntries.length === 0) return;
+                const dataStore = area.isLaporan ? laporanCleaning : attendancePiket;
+                const slots = (dataStore[selectedViewDate]?.[area.id] || []).filter(s => s && (s.name || s.durasi));
+                if(slots.length === 0) return;
                 hasAny = true;
                 text += `\n*${area.name}*\n`;
-                if(piketSlots.length) {
-                    text += `Piket:\n`;
-                    piketSlots.forEach(s => {
-                        const durasiTxt = s.durasi ? ` (*${s.durasi}*)` : '';
-                        text += `- *${s.name}*${durasiTxt}\n`;
-                    });
-                }
-                if(laporanEntries.length) {
-                    text += `Laporan:\n`;
-                    laporanEntries.forEach(e => {
-                        const nameTxt = e.name ? `*${e.name}*` : '(nama belum dipilih)';
-                        const durasiTxt = e.durasi ? `*${e.durasi}*` : '(jam belum dipilih)';
-                        text += `- ${nameTxt} — ${durasiTxt}\n`;
-                    });
-                }
+                slots.forEach(s => {
+                    const nameTxt = s.name ? `*${s.name}*` : '(nama belum dipilih)';
+                    const durasiTxt = s.durasi ? ` (*${s.durasi}*)` : '';
+                    text += `- ${nameTxt}${durasiTxt}\n`;
+                });
             });
-            if(!hasAny) text += `\n(Belum ada slot piket atau laporan terisi)\n`;
+            if(!hasAny) text += `\n(Belum ada slot terisi)\n`;
 
             return text;
         }
