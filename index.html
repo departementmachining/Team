@@ -1211,7 +1211,7 @@
             renderPiketAttendanceList(activeStaff);
 
             // Kumpulan nama yang SUDAH dapat job (terisi di slot manapun, di area manapun hari ini)
-            // -- dipakai untuk menghijaukan opsi di dropdown & menghitung total keseluruhan.
+            // -- dipakai untuk menghijaukan opsi di dropdown & menghitung total keseluruhan personel.
             const assignedNames = new Set();
             piketAreas.forEach(a => {
                 (attendancePiket[selectedViewDate]?.[a.id] || []).forEach(slot => {
@@ -1223,26 +1223,28 @@
             piketAreas.forEach(area => {
                 const savedSlots = attendancePiket[selectedViewDate]?.[area.id] || [];
                 const displayCount = Math.max(area.defaultSlots, savedSlots.length);
-                const filledCount = savedSlots.filter(s => s && s.name).length;
+                // Jumlah PERSONEL yang tercatat di job ini (bukan jumlah slot).
+                const personCount = savedSlots.filter(s => s && s.name).length;
                 let slotHtml = '';
                 
                 for(let i=0; i<displayCount; i++) {
                     const currentSlot = savedSlots[i] || { name: "", durasi: "" };
                     const currentVal = currentSlot.name || "";
-                    // Nama yang sudah dapat job (di area manapun) ditandai hijau di dropdown,
-                    // kecuali dia sendiri yang sedang terpilih di slot ini.
+                    // Nama yang sudah dapat job (di area manapun) ditandai hijau di dropdown.
+                    // Dropdown native tidak selalu render "color" pada <option> (terutama di Windows),
+                    // jadi dipakai "background-color" yang jauh lebih konsisten renderingnya di semua OS/browser.
                     let opts = activeStaff
                         .map(n => {
                             const isAssignedElsewhere = assignedNames.has(n) && n !== currentVal;
-                            const style = isAssignedElsewhere ? ' style="color:#059669;font-weight:800;"' : '';
-                            return `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}${style}>${n}${isAssignedElsewhere ? ' ✓' : ''}</option>`;
+                            const style = isAssignedElsewhere ? ' style="background-color:#d1fae5;color:#065f46;font-weight:800;"' : '';
+                            return `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}${style}>${isAssignedElsewhere ? '✓ ' : ''}${n}</option>`;
                         })
                         .join('');
                     const selectId = `piket-${area.id}-${i}-durasi`;
                     
                     slotHtml += `
                         <div class="flex flex-col gap-2 mb-3">
-                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer ${currentVal ? 'text-emerald-700' : ''}">
+                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer ${currentVal ? 'text-emerald-700 !bg-emerald-50 !border-emerald-100' : ''}">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
@@ -1256,7 +1258,7 @@
                 container.innerHTML += `
                     <div class="area-card p-5 sm:p-8 bg-white shadow-sm border border-slate-100 animate__animated animate__fadeIn">
                         <div class="flex justify-between items-center mb-6">
-                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-widest">${area.name} <span class="text-emerald-600">(${filledCount}/${displayCount})</span></h4>
+                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-widest">${area.name} <span class="text-emerald-600">(${personCount})</span></h4>
                             <div class="flex items-center gap-1">
                                 <button onclick="addSlot('${area.id}')" class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all">+ SLOT</button>
                                 ${area.custom ? `<button onclick="deletePiketArea('${area.id}')" class="text-[9px] font-black text-rose-400 bg-rose-50 px-3 py-1.5 rounded-xl hover:bg-rose-500 hover:text-white transition-all">Hapus</button>` : ''}
