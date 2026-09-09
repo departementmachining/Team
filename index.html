@@ -371,7 +371,7 @@
             // Laporan sekarang jadi job/area piket biasa -- sejajar & tidak dibedakan tampilannya
             // dari Cleaning NC/Conveyor/dst. isLaporan:true hanya menentukan ia menyimpan datanya
             // ke laporanCleaning (bukan attendancePiket), murni soal penyimpanan data, bukan tampilan.
-            { id: "p-lap", name: "Laporan Cleaning", color: "border-teal-500", defaultSlots: 1, isLaporan: true }
+            { id: "p-lap", name: "Laporan", color: "border-teal-500", defaultSlots: 1, isLaporan: true }
         ];
 
         let extraHolidays = [], attendancePiket = {}, customDailyRolling = {}, absentData = {}, masterSchedules = {}, karyawanPhotos = {};
@@ -791,14 +791,9 @@
 
             // Semua slot posisi (di seluruh grup) dipakai sebagai opsi tukar untuk tiap dropdown.
             const allSlots = data.staff.map((n, i) => ({ idx: i, name: n }));
-            // Daftar nama pengganti (dari "Kelola Daftar Rekomendasi"), dikelompokkan per Group (B/C/dst)
-            // untuk mengisi slot yang kosong.
-            const penggantiByGroup = {};
-            manualSuggestions.forEach(s => {
-                const g = (s.group || '').trim() || 'Lainnya';
-                if(!penggantiByGroup[g]) penggantiByGroup[g] = [];
-                penggantiByGroup[g].push(s.name);
-            });
+            // Daftar Group unik dari manualSuggestions (mis. "B", "C"), untuk dropdown pengganti 2-langkah.
+            const penggantiGroups = [...new Set(manualSuggestions.map(s => (s.group || '').trim()).filter(Boolean))];
+            const penggantiGroupOpts = penggantiGroups.map(g => `<option value="${escAttr(g)}">Group ${escAttr(g)}</option>`).join('');
 
             let idx = 0;
             jobGroups.forEach((g) => {
@@ -810,26 +805,31 @@
                     let opts = allSlots
                         .map(s => `<option value="pos:${s.idx}" ${!isEmpty && s.idx === slotIdx ? 'selected' : ''}>${escAttr(s.name)}</option>`)
                         .join('');
-                    // Jika slot kosong, tambahkan daftar Pengganti (dikelompokkan per Group) sebagai opsi langsung isi slot ini.
-                    let penggantiOpts = '';
-                    if(isEmpty) {
-                        penggantiOpts = Object.keys(penggantiByGroup).map(g2 =>
-                            `<optgroup label="Group ${escAttr(g2)}">` +
-                            penggantiByGroup[g2].map(pn => `<option value="pengganti:${escAttr(pn)}">${escAttr(pn)}</option>`).join('') +
-                            `</optgroup>`
-                        ).join('');
-                    }
+                    // Slot kosong: dropdown tukar posisi tetap ada, ditambah 2 dropdown khusus
+                    // Pengganti (pilih Group dulu, baru nama sesuai group itu).
+                    const penggantiStep2 = isEmpty ? `
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <select id="rollingPenggantiGroup-${slotIdx}" onchange="renderRollingPenggantiNames(${slotIdx})" class="name-select w-full p-3 rounded-2xl border-2 border-amber-200 bg-amber-50 text-[11px] font-bold outline-none cursor-pointer">
+                                <option value="" selected disabled>-- Group Pengganti --</option>
+                                ${penggantiGroupOpts}
+                            </select>
+                            <select id="rollingPenggantiName-${slotIdx}" onchange="swapBySelect(${slotIdx}, this.value)" class="name-select w-full p-3 rounded-2xl border-2 border-amber-200 bg-amber-50 text-[11px] font-bold outline-none cursor-pointer" disabled>
+                                <option value="" selected disabled>-- Pilih Group Dulu --</option>
+                            </select>
+                        </div>` : '';
                     return `
-                    <div class="flex gap-2 mb-3 items-center">
-                        ${getAvatarHtml(n)}
-                        <select onchange="swapBySelect(${slotIdx}, this.value)" class="name-select rolling-select flex-1 p-3 rounded-2xl border-2 ${isEmpty ? 'border-amber-200 bg-amber-50' : 'border-slate-50 bg-white'} text-[12px] font-extrabold outline-none cursor-pointer">
-                            ${isEmpty ? `<option value="" selected disabled>-- Pilih Pengganti --</option>` : ''}
-                            ${opts}
-                            ${penggantiOpts}
-                        </select>
-                        <button onclick="markAbsent(${slotIdx})" class="p-3 bg-rose-50 text-rose-400 rounded-2xl hover:bg-rose-500 hover:text-white transition-colors shadow-sm shrink-0">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
+                    <div class="flex flex-col gap-1 mb-3">
+                        <div class="flex gap-2 items-center">
+                            ${getAvatarHtml(n)}
+                            <select onchange="swapBySelect(${slotIdx}, this.value)" class="name-select rolling-select flex-1 p-3 rounded-2xl border-2 ${isEmpty ? 'border-amber-200 bg-amber-50' : 'border-slate-50 bg-white'} text-[12px] font-extrabold outline-none cursor-pointer">
+                                ${isEmpty ? `<option value="" selected disabled>-- Tukar Posisi --</option>` : ''}
+                                ${opts}
+                            </select>
+                            <button onclick="markAbsent(${slotIdx})" class="p-3 bg-rose-50 text-rose-400 rounded-2xl hover:bg-rose-500 hover:text-white transition-colors shadow-sm shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        ${penggantiStep2}
                     </div>`;
                 }).join('');
                 
@@ -844,6 +844,17 @@
             });
 
             renderExtraJobGroups(data);
+        }
+
+        // Langkah kedua dropdown Pengganti di Rolling: isi dropdown nama sesuai Group yang dipilih.
+        function renderRollingPenggantiNames(slotIdx) {
+            const groupSelect = document.getElementById(`rollingPenggantiGroup-${slotIdx}`);
+            const nameSelect = document.getElementById(`rollingPenggantiName-${slotIdx}`);
+            const chosenGroup = groupSelect.value;
+            const names = manualSuggestions.filter(s => (s.group || '').trim() === chosenGroup);
+            nameSelect.disabled = false;
+            nameSelect.innerHTML = `<option value="" selected disabled>-- Pilih Pengganti --</option>` +
+                names.map(s => `<option value="pengganti:${escAttr(s.name)}">${escAttr(s.name)}</option>`).join('');
         }
 
         // Job group tambahan (hasil "+ Job"): slot independen dari rolling 4-2, diisi manual
