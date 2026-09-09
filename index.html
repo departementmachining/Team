@@ -197,7 +197,12 @@
 
                                 <div id="manualSuggestManager" class="hidden space-y-3 pt-3 border-t border-white/10">
                                     <input type="text" id="manualSuggestNameInput" placeholder="Nama..." class="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-[11px] font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
-                                    <input type="text" id="manualSuggestGroupInput" placeholder="Group / Asal (opsional)..." class="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-[11px] font-bold focus:bg-white focus:text-slate-900 outline-none transition-all placeholder:text-white/30">
+                                    <div class="flex gap-2">
+                                        <select id="manualSuggestGroupInput" class="flex-1 p-3 bg-white/10 border border-white/20 rounded-xl text-[11px] font-bold focus:bg-white focus:text-slate-900 outline-none transition-all">
+                                            <option value="" class="text-slate-900">-- Pilih Group --</option>
+                                        </select>
+                                        <button onclick="addSuggestGroup()" class="shrink-0 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all">+ Group</button>
+                                    </div>
                                     <button onclick="addManualSuggestEntry()" class="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-emerald-600 transition-all active:scale-95">+ Tambah ke Daftar</button>
                                     <div id="manualSuggestList" class="space-y-2 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar"></div>
                                 </div>
@@ -367,21 +372,25 @@
             { id: "p-cv", name: "Cleaning Conveyor", color: "border-emerald-500", defaultSlots: 2 },
             { id: "p-gas", name: "Gasleak", color: "border-orange-500", defaultSlots: 1 },
             { id: "p-dek", name: "Area Dek Atas", color: "border-purple-500", defaultSlots: 1 },
-            { id: "p-out", name: "Outline", color: "border-rose-500", defaultSlots: 2 },
-            // Laporan sekarang jadi job/area piket biasa -- sejajar & tidak dibedakan tampilannya
-            // dari Cleaning NC/Conveyor/dst. isLaporan:true hanya menentukan ia menyimpan datanya
-            // ke laporanCleaning (bukan attendancePiket), murni soal penyimpanan data, bukan tampilan.
-            { id: "p-lap", name: "Laporan", color: "border-teal-500", defaultSlots: 1, isLaporan: true }
+            { id: "p-out", name: "Outline", color: "border-rose-500", defaultSlots: 2 }
         ];
+        // Job "Laporan" tidak lagi dibuat otomatis -- ditambahkan sendiri oleh user lewat "+ Job"
+        // (sama seperti job piket lain), dan begitu ditambahkan sifatnya permanen (custom:true),
+        // tersimpan ke sistem data yang sama persis (attendancePiket) tanpa pembeda apa pun.
 
         let extraHolidays = [], attendancePiket = {}, customDailyRolling = {}, absentData = {}, masterSchedules = {}, karyawanPhotos = {};
         // prinsipSudahBaca: { nama: isoTimestamp } untuk siklus yang sedang berjalan
         // prinsipRiwayat: array of { completedAt: isoTimestamp, entries: { nama: isoTimestamp } } untuk siklus yang sudah selesai (auto-reset)
         let prinsipSudahBaca = {}, prinsipRiwayat = [];
-        // laporanCleaning: { [tanggal]: { [areaId]: [ { name, durasi } ] } } -- sejajar dengan attendancePiket
+        // laporanCleaning: variabel legacy, HANYA dipakai untuk memuat data lama dari penyimpanan
+        // lalu dimigrasikan ke attendancePiket (lihat migrateLegacyLaporanIntoPiket). Tidak dipakai
+        // lagi untuk menyimpan data baru -- semua job (termasuk "Laporan") kini 100% pakai attendancePiket.
         let laporanCleaning = {};
         // manualSuggestions: [ { name, group } ] daftar rekomendasi untuk Pengganti Manual
         let manualSuggestions = [];
+        // suggestGroupList: daftar pilihan Group untuk dropdown Kelola Daftar Rekomendasi (mis. "B", "C").
+        // Bisa ditambah sendiri oleh user lewat tombol "+ Group".
+        let suggestGroupList = ["B", "C"];
         // Nama-nama yang ditambahkan lewat "Pengganti Manual" (dikecualikan dari Piket & Laporan)
         let manualAddedNames = [];
 
@@ -439,36 +448,39 @@
                     });
                 });
             });
-            Object.keys(laporanCleaning).forEach(k => {
-                laporanCleaning[k] = migrateLaporanDayToAreas(laporanCleaning[k]);
-            });
+            migrateLegacyLaporanIntoPiket();
         }
 
-        // Migrasi struktur laporan lama -> object per-area { [areaId]: [ {name, durasi} ] }.
-        // Data lama (array datar, atau area terpisah "l-clean", atau sempat tercampur ke "p-nc"
-        // saat sub-section digabung ke card) semuanya dipindahkan ke area "Laporan Cleaning" (p-lap),
-        // yang sekarang jadi job/area piket tersendiri lagi -- sejajar dengan job cleaning lain.
-        function migrateLaporanDayToAreas(dayData) {
-            const defaultAreaId = piketAreas.find(a => a.isLaporan)?.id || "p-lap";
-            if (Array.isArray(dayData)) {
-                return { [defaultAreaId]: dayData.map(e => ({ name: stripGSuffix(e.name), durasi: e.durasi || "" })) };
+        // Migrasi data laporan lama (dari versi-versi sebelumnya: laporanCleaning terpisah, baik
+        // berbentuk array datar maupun object per-area dengan id "l-clean"/"p-nc"/"p-lap") supaya
+        // menyatu 100% ke attendancePiket, di bawah 1 area permanen "Laporan" -- tidak ada lagi
+        // sistem data laporanCleaning terpisah.
+        function migrateLegacyLaporanIntoPiket() {
+            if (typeof laporanCleaning === 'undefined' || !laporanCleaning || Object.keys(laporanCleaning).length === 0) return;
+
+            const LAPORAN_AREA_ID = 'p-lap';
+            if (!piketAreas.some(a => a.id === LAPORAN_AREA_ID)) {
+                piketAreas.push({ id: LAPORAN_AREA_ID, name: "Laporan", color: "border-teal-500", defaultSlots: 1, custom: true });
             }
-            const obj = dayData && typeof dayData === 'object' ? { ...dayData } : {};
-            // Data lama dari area/id sebelumnya ("l-clean" versi terpisah, atau "p-nc" versi sub-section
-            // yang sempat digabung) dipindahkan ke area Laporan Cleaning yang baru, tanpa menimpa data
-            // yang sudah ada di sana.
-            ['l-clean', 'p-nc'].forEach(legacyId => {
-                if (obj[legacyId] && obj[legacyId].length) {
-                    obj[defaultAreaId] = [...(obj[defaultAreaId] || []), ...obj[legacyId]];
-                    delete obj[legacyId];
-                } else if (obj[legacyId]) {
-                    delete obj[legacyId];
+
+            Object.keys(laporanCleaning).forEach(dateKey => {
+                const dayData = laporanCleaning[dateKey];
+                let entries = [];
+                if (Array.isArray(dayData)) {
+                    entries = dayData;
+                } else if (dayData && typeof dayData === 'object') {
+                    Object.keys(dayData).forEach(legacyAreaId => {
+                        entries = entries.concat(dayData[legacyAreaId] || []);
+                    });
                 }
+                entries = entries.map(e => ({ name: stripGSuffix(e.name || ""), durasi: e.durasi || "" })).filter(e => e.name || e.durasi);
+                if (entries.length === 0) return;
+
+                if (!attendancePiket[dateKey]) attendancePiket[dateKey] = {};
+                attendancePiket[dateKey][LAPORAN_AREA_ID] = [...(attendancePiket[dateKey][LAPORAN_AREA_ID] || []), ...entries];
             });
-            Object.keys(obj).forEach(areaId => {
-                obj[areaId] = (obj[areaId] || []).map(e => ({ name: stripGSuffix(e.name), durasi: e.durasi || "" }));
-            });
-            return obj;
+
+            laporanCleaning = {};
         }
 
         let currentDisplayDate = new Date();
@@ -504,7 +516,7 @@
         function triggerCloudSave() {
             const payload = { 
                 extraHolidays, attendancePiket, customDailyRolling, absentData, karyawanPhotos,
-                prinsipSudahBaca, prinsipRiwayat, laporanCleaning, manualSuggestions, manualAddedNames,
+                prinsipSudahBaca, prinsipRiwayat, manualSuggestions, manualAddedNames, suggestGroupList,
                 jobGroups, extraJobGroups, extraJobAssignments, piketAreas,
                 cycleBaseDate: document.getElementById('cycleBaseDate').value 
             };
@@ -546,6 +558,7 @@
                 laporanCleaning = d.laporanCleaning || {};
                 manualSuggestions = d.manualSuggestions || [];
                 manualAddedNames = d.manualAddedNames || [];
+                suggestGroupList = d.suggestGroupList || suggestGroupList;
                 jobGroups = d.jobGroups || jobGroups;
                 extraJobGroups = d.extraJobGroups || [];
                 extraJobAssignments = d.extraJobAssignments || {};
@@ -578,6 +591,7 @@
                         laporanCleaning = d.laporanCleaning || laporanCleaning;
                         manualSuggestions = d.manualSuggestions || manualSuggestions;
                         manualAddedNames = d.manualAddedNames || manualAddedNames;
+                        suggestGroupList = d.suggestGroupList || suggestGroupList;
                         jobGroups = d.jobGroups || jobGroups;
                         extraJobGroups = d.extraJobGroups || extraJobGroups;
                         extraJobAssignments = d.extraJobAssignments || extraJobAssignments;
@@ -1123,6 +1137,15 @@
                     .join('');
             }
 
+            // Dropdown pilihan Group di form tambah rekomendasi
+            const groupSelect = document.getElementById('manualSuggestGroupInput');
+            if(groupSelect) {
+                const currentVal = groupSelect.value;
+                groupSelect.innerHTML = `<option value="" class="text-slate-900">-- Pilih Group --</option>` +
+                    suggestGroupList.map(g => `<option value="${escAttr(g)}" class="text-slate-900">Group ${escAttr(g)}</option>`).join('');
+                if(suggestGroupList.includes(currentVal)) groupSelect.value = currentVal;
+            }
+
             // List kelola daftar rekomendasi
             const listEl = document.getElementById('manualSuggestList');
             if(!listEl) return;
@@ -1134,10 +1157,21 @@
                 <div class="flex items-center justify-between p-3 bg-white/10 rounded-xl border border-white/10">
                     <div class="flex flex-col">
                         <span class="text-[11px] font-bold">${s.name}</span>
-                        ${s.group ? `<span class="text-[9px] text-white/50 font-bold uppercase tracking-wider">${s.group}</span>` : ''}
+                        ${s.group ? `<span class="text-[9px] text-white/50 font-bold uppercase tracking-wider">Group ${s.group}</span>` : ''}
                     </div>
                     <button onclick="removeManualSuggestEntry(${i})" class="text-[9px] font-black text-rose-300 uppercase tracking-widest hover:text-rose-100 transition-colors shrink-0 ml-2">Hapus</button>
                 </div>`).join('');
+        }
+
+        // Tambah pilihan Group baru ke dropdown (mis. "D", "E") -- tersimpan permanen.
+        function addSuggestGroup() {
+            const g = prompt('Nama Group baru (contoh: D):');
+            if(!g || !g.trim()) return;
+            const trimmed = g.trim();
+            if(!suggestGroupList.includes(trimmed)) suggestGroupList.push(trimmed);
+            renderManualSuggestUI();
+            document.getElementById('manualSuggestGroupInput').value = trimmed;
+            triggerCloudSave();
         }
 
         function addManualSuggestEntry() {
@@ -1173,55 +1207,58 @@
             }
 
             const currentAbsents = absentData[selectedViewDate] || [];
-            infoText.innerText = `${piketAreas.length} Area Aktif`;
             const activeStaff = data.staff.filter(n => n !== "--- Kosong ---" && !currentAbsents.includes(n) && !manualAddedNames.includes(n));
             renderPiketAttendanceList(activeStaff);
 
+            // Kumpulan nama yang SUDAH dapat job (terisi di slot manapun, di area manapun hari ini)
+            // -- dipakai untuk menghijaukan opsi di dropdown & menghitung total keseluruhan.
+            const assignedNames = new Set();
+            piketAreas.forEach(a => {
+                (attendancePiket[selectedViewDate]?.[a.id] || []).forEach(slot => {
+                    if(slot && slot.name) assignedNames.add(slot.name);
+                });
+            });
+            infoText.innerText = `${assignedNames.size}/${activeStaff.length} Personil Dapat Job`;
+
             piketAreas.forEach(area => {
-                // Job "Laporan Cleaning" (isLaporan:true) simpan datanya ke laporanCleaning,
-                // job piket lain ke attendancePiket -- tapi tampilannya (card, slot, tombol) identik.
-                const dataStore = area.isLaporan ? laporanCleaning : attendancePiket;
-                const savedSlots = dataStore[selectedViewDate]?.[area.id] || [];
+                const savedSlots = attendancePiket[selectedViewDate]?.[area.id] || [];
                 const displayCount = Math.max(area.defaultSlots, savedSlots.length);
-                const setFieldFn = area.isLaporan ? 'setLaporanField' : 'setPiket';
-                const setDurasiFn = area.isLaporan ? 'setLaporanField' : 'setPiketDurasi';
-                const removeFn = area.isLaporan ? 'removeLaporanSlot' : 'removeSlot';
+                const filledCount = savedSlots.filter(s => s && s.name).length;
                 let slotHtml = '';
                 
                 for(let i=0; i<displayCount; i++) {
                     const currentSlot = savedSlots[i] || { name: "", durasi: "" };
                     const currentVal = currentSlot.name || "";
+                    // Nama yang sudah dapat job (di area manapun) ditandai hijau di dropdown,
+                    // kecuali dia sendiri yang sedang terpilih di slot ini.
                     let opts = activeStaff
-                        .map(n => `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}>${n}</option>`)
+                        .map(n => {
+                            const isAssignedElsewhere = assignedNames.has(n) && n !== currentVal;
+                            const style = isAssignedElsewhere ? ' style="color:#059669;font-weight:800;"' : '';
+                            return `<option value="${escAttr(n)}" ${n === currentVal ? 'selected' : ''}${style}>${n}${isAssignedElsewhere ? ' ✓' : ''}</option>`;
+                        })
                         .join('');
                     const selectId = `piket-${area.id}-${i}-durasi`;
-                    const nameOnChange = area.isLaporan
-                        ? `setLaporanField('${area.id}', ${i}, 'name', this.value)`
-                        : `setPiket('${area.id}', ${i}, this.value)`;
-                    const durasiOnChange = area.isLaporan
-                        ? `setLaporanField('${area.id}', ${i}, 'durasi', __VAL__)`
-                        : `setPiketDurasi('${area.id}', ${i}, __VAL__)`;
                     
                     slotHtml += `
                         <div class="flex flex-col gap-2 mb-3">
-                            <select onchange="${nameOnChange}" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer">
+                            <select onchange="setPiket('${area.id}', ${i}, this.value)" class="name-select w-full p-4 border-2 border-slate-50 rounded-2xl text-[11px] font-bold outline-none bg-slate-50 focus:bg-white focus:border-indigo-200 transition-all appearance-none cursor-pointer ${currentVal ? 'text-emerald-700' : ''}">
                                 <option value="">-- Pilih --</option>
                                 ${opts}
                             </select>
                             <div class="w-full flex items-center gap-2">
-                                ${durasiFieldHtml(currentSlot.durasi || "", durasiOnChange, selectId)}
-                                ${i >= area.defaultSlots ? `<button onclick="${removeFn}('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
+                                ${durasiFieldHtml(currentSlot.durasi || "", `setPiketDurasi('${area.id}', ${i}, __VAL__)`, selectId)}
+                                ${i >= area.defaultSlots ? `<button onclick="removeSlot('${area.id}', ${i})" class="text-rose-400 p-2 hover:text-rose-600 transition-all shrink-0">✕</button>` : ''}
                             </div>
                         </div>`;
                 }
                 
-                const addSlotFn = area.isLaporan ? 'addLaporanSlot' : 'addSlot';
                 container.innerHTML += `
                     <div class="area-card p-5 sm:p-8 bg-white shadow-sm border border-slate-100 animate__animated animate__fadeIn">
                         <div class="flex justify-between items-center mb-6">
-                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-widest">${area.name}</h4>
+                            <h4 class="text-sm font-black text-slate-800 uppercase tracking-widest">${area.name} <span class="text-emerald-600">(${filledCount}/${displayCount})</span></h4>
                             <div class="flex items-center gap-1">
-                                <button onclick="${addSlotFn}('${area.id}')" class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all">+ SLOT</button>
+                                <button onclick="addSlot('${area.id}')" class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all">+ SLOT</button>
                                 ${area.custom ? `<button onclick="deletePiketArea('${area.id}')" class="text-[9px] font-black text-rose-400 bg-rose-50 px-3 py-1.5 rounded-xl hover:bg-rose-500 hover:text-white transition-all">Hapus</button>` : ''}
                             </div>
                         </div>
@@ -1245,7 +1282,6 @@
             if(!confirm('Hapus job/area ini beserta semua isiannya?')) return;
             piketAreas = piketAreas.filter(a => a.id !== areaId);
             Object.keys(attendancePiket).forEach(dateKey => { delete attendancePiket[dateKey][areaId]; });
-            Object.keys(laporanCleaning).forEach(dateKey => { delete laporanCleaning[dateKey][areaId]; });
             renderPiketArea();
             triggerCloudSave();
         }
@@ -1315,34 +1351,6 @@
             });
         }
 
-        // === LAPORAN CLEANING ENGINE ===
-        // Laporan tidak lagi punya render/container sendiri -- slotnya digambar langsung di
-        // dalam card Piket (lihat renderPiketArea), memakai area.id yang sama persis.
-        function addLaporanSlot(areaId) {
-            if(!laporanCleaning[selectedViewDate]) laporanCleaning[selectedViewDate] = {};
-            if(!laporanCleaning[selectedViewDate][areaId]) laporanCleaning[selectedViewDate][areaId] = [];
-            laporanCleaning[selectedViewDate][areaId].push({ name: "", durasi: "" });
-            renderPiketArea();
-            triggerCloudSave();
-        }
-
-        function removeLaporanSlot(areaId, idx) {
-            if(laporanCleaning[selectedViewDate]?.[areaId]) {
-                laporanCleaning[selectedViewDate][areaId].splice(idx, 1);
-                renderPiketArea();
-                triggerCloudSave();
-            }
-        }
-
-        function setLaporanField(areaId, idx, field, val) {
-            if(!laporanCleaning[selectedViewDate]) laporanCleaning[selectedViewDate] = {};
-            if(!laporanCleaning[selectedViewDate][areaId]) laporanCleaning[selectedViewDate][areaId] = [];
-            if(!laporanCleaning[selectedViewDate][areaId][idx]) laporanCleaning[selectedViewDate][areaId][idx] = { name: "", durasi: "" };
-            laporanCleaning[selectedViewDate][areaId][idx][field] = val;
-            renderPiketArea();
-            triggerCloudSave();
-        }
-
         // === SHARE PIKET & LAPORAN ===
         function buildPiketDanLaporanText() {
             const parts = k => k.split('-');
@@ -1354,8 +1362,7 @@
 
             let hasAny = false;
             piketAreas.forEach(area => {
-                const dataStore = area.isLaporan ? laporanCleaning : attendancePiket;
-                const slots = (dataStore[selectedViewDate]?.[area.id] || []).filter(s => s && (s.name || s.durasi));
+                const slots = (attendancePiket[selectedViewDate]?.[area.id] || []).filter(s => s && (s.name || s.durasi));
                 if(slots.length === 0) return;
                 hasAny = true;
                 text += `\n*${area.name}*\n`;
