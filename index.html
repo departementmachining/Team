@@ -141,6 +141,7 @@
                 <button onclick="showTab('piket')" id="btn-piket" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Piket &amp; Laporan</button>
                 <button onclick="showTab('prinsip')" id="btn-prinsip" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Prinsip Kerja</button>
                 <button onclick="showTab('jadwal-kerja')" id="btn-jadwal" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Kalender</button>
+                <button onclick="showTab('consumable')" id="btn-consumable" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Consumable</button>
                 <button onclick="showTab('settings')" id="btn-settings" class="tab-btn shrink-0 px-5 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs text-slate-500 hover:bg-slate-50 transition-all uppercase tracking-widest">Supabase</button>
             </div>
         </nav>
@@ -317,6 +318,64 @@
                 </div>
             </section>
 
+            <!-- Consumable Section -->
+            <section id="consumable" class="tab-content">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8">
+                    <div class="lg:col-span-3 bg-white rounded-[24px] sm:rounded-[40px] shadow-sm p-5 sm:p-10 border border-slate-100">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-10 gap-4">
+                            <div>
+                                <h2 class="text-xl sm:text-3xl font-black text-slate-800">Pengambilan Consumable</h2>
+                                <p id="consumableStatusInfo" class="text-[10px] sm:text-[11px] text-indigo-500 font-black uppercase mt-2 tracking-[0.2em] sm:tracking-[0.3em]"></p>
+                            </div>
+                            <button onclick="resetAllConsumable()" class="w-full sm:w-auto text-[10px] font-black text-rose-500 bg-rose-50 px-6 py-3.5 sm:px-8 rounded-2xl hover:bg-rose-100 transition-all uppercase border border-rose-100 tracking-[0.15em] sm:tracking-[0.2em]">Reset Semua Riwayat</button>
+                        </div>
+
+                        <!-- Add Item Form -->
+                        <div class="bg-slate-50 rounded-[20px] sm:rounded-[28px] border border-slate-100 p-4 sm:p-6 mb-8 sm:mb-10">
+                            <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-4">+ Tambah Pengambilan</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                <div class="lg:col-span-1">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Nama Item</label>
+                                    <input type="text" id="consumableItemInput" placeholder="Cth: Sarung Tangan" class="w-full p-3.5 sm:p-4 border-2 border-slate-100 rounded-2xl text-xs font-bold outline-none bg-white focus:border-indigo-300 transition-all placeholder:text-slate-300">
+                                </div>
+                                <div class="lg:col-span-1">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Nama Pengambil</label>
+                                    <select id="consumableNameInput" class="name-select w-full p-3.5 sm:p-4 border-2 border-slate-100 rounded-2xl text-xs font-bold outline-none bg-white focus:border-indigo-300 transition-all appearance-none">
+                                        <option value="">-- Pilih Nama --</option>
+                                    </select>
+                                </div>
+                                <div class="lg:col-span-1">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Tanggal Pengambilan</label>
+                                    <input type="date" id="consumableDateInput" class="w-full p-3.5 sm:p-4 border-2 border-slate-100 rounded-2xl text-xs font-bold outline-none bg-white focus:border-indigo-300 transition-all">
+                                </div>
+                                <div class="lg:col-span-1">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Total</label>
+                                    <input type="number" min="1" id="consumableTotalInput" placeholder="Jumlah" class="w-full p-3.5 sm:p-4 border-2 border-slate-100 rounded-2xl text-xs font-bold outline-none bg-white focus:border-indigo-300 transition-all placeholder:text-slate-300">
+                                </div>
+                            </div>
+                            <button onclick="addConsumableItem()" class="mt-4 w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 text-white px-8 py-4 rounded-2xl text-[11px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 uppercase tracking-[0.2em]">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" /></svg>
+                                Tambah Item
+                            </button>
+                        </div>
+
+                        <!-- List -->
+                        <div id="consumableListContainer" class="space-y-3 sm:space-y-4"></div>
+                    </div>
+
+                    <div class="lg:col-span-1">
+                        <div class="bg-white rounded-[24px] sm:rounded-[32px] shadow-sm p-5 sm:p-8 border border-slate-100 lg:sticky lg:top-24">
+                            <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-indigo-500 animate-pulse"></span> Rekap per Orang
+                            </h3>
+                            <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-6">Total item diambil (semua waktu)</p>
+                            <div id="consumableRecapList" class="space-y-3 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Settings Section -->
             <section id="settings" class="tab-content">
                 <div class="max-w-2xl mx-auto glass-panel rounded-[28px] sm:rounded-[50px] shadow-2xl p-6 sm:p-12 text-center border-white/50">
@@ -393,6 +452,8 @@
         let suggestGroupList = ["B", "C"];
         // Nama-nama yang ditambahkan lewat "Pengganti Manual" (dikecualikan dari Piket & Laporan)
         let manualAddedNames = [];
+        // consumableItems: riwayat pengambilan consumable -> [{ id, item, name, date, total, createdAt }]
+        let consumableItems = [];
 
         // Field jam piket/laporan -- pakai native time picker, tersimpan sebagai string "HH:MM" (contoh "20:00").
         // onChangeExpr: ekspresi JS (string) memakai placeholder __VAL__ untuk nilai jam baru, contoh: "setPiketDurasi('p-out', 0, __VAL__)"
@@ -517,7 +578,7 @@
             const payload = { 
                 extraHolidays, attendancePiket, customDailyRolling, absentData, karyawanPhotos,
                 prinsipSudahBaca, prinsipRiwayat, manualSuggestions, manualAddedNames, suggestGroupList,
-                jobGroups, extraJobGroups, extraJobAssignments, piketAreas,
+                jobGroups, extraJobGroups, extraJobAssignments, piketAreas, consumableItems,
                 cycleBaseDate: document.getElementById('cycleBaseDate').value 
             };
             localStorage.setItem('local_data_v4.9', JSON.stringify(payload));
@@ -563,6 +624,7 @@
                 extraJobGroups = d.extraJobGroups || [];
                 extraJobAssignments = d.extraJobAssignments || {};
                 piketAreas = d.piketAreas || piketAreas;
+                consumableItems = d.consumableItems || [];
                 if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
             }
 
@@ -596,6 +658,7 @@
                         extraJobGroups = d.extraJobGroups || extraJobGroups;
                         extraJobAssignments = d.extraJobAssignments || extraJobAssignments;
                         piketAreas = d.piketAreas || piketAreas;
+                        consumableItems = d.consumableItems || consumableItems;
                         if(d.cycleBaseDate) document.getElementById('cycleBaseDate').value = d.cycleBaseDate;
                     }
                     setCloudStatus('SUCCESS');
@@ -608,6 +671,7 @@
             }
             renderPrinsipKerja();
             renderManualSuggestUI();
+            renderConsumable();
             migrateLegacyGSuffix();
             migratePiketSlotsStructure();
             triggerCloudSave();
@@ -660,6 +724,7 @@
                 renderRollingJobs();
                 renderPiketArea();
                 renderPrinsipKerja();
+                renderConsumable();
                 triggerCloudSave();
             };
             reader.readAsDataURL(file);
@@ -1540,10 +1605,139 @@
             triggerCloudSave();
         }
 
+        // CONSUMABLE ENGINE
+        // Semua nama yang bisa dipilih untuk pengambilan consumable: karyawan master +
+        // siapapun yang pernah ditambahkan lewat "Pengganti Manual", digabung & di-dedupe.
+        function getConsumableNameOptions() {
+            const names = [...KARYAWAN_MASTER, ...manualAddedNames];
+            return [...new Set(names)];
+        }
+
+        function populateConsumableNameSelect() {
+            const sel = document.getElementById('consumableNameInput');
+            if (!sel) return;
+            const current = sel.value;
+            sel.innerHTML = '<option value="">-- Pilih Nama --</option>' +
+                getConsumableNameOptions().map(n => `<option value="${escAttr(n)}">${escAttr(n)}</option>`).join('');
+            if (current && getConsumableNameOptions().includes(current)) sel.value = current;
+        }
+
+        function addConsumableItem() {
+            const itemInput = document.getElementById('consumableItemInput');
+            const nameInput = document.getElementById('consumableNameInput');
+            const dateInput = document.getElementById('consumableDateInput');
+            const totalInput = document.getElementById('consumableTotalInput');
+
+            const item = itemInput.value.trim();
+            const name = nameInput.value;
+            const date = dateInput.value;
+            const total = parseInt(totalInput.value, 10);
+
+            if (!item) { alert('Nama item wajib diisi.'); return; }
+            if (!name) { alert('Pilih nama pengambil.'); return; }
+            if (!date) { alert('Tanggal pengambilan wajib diisi.'); return; }
+            if (!total || total < 1) { alert('Total wajib diisi dan lebih dari 0.'); return; }
+
+            consumableItems.push({
+                id: 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+                item, name, date, total,
+                createdAt: new Date().toISOString()
+            });
+
+            itemInput.value = '';
+            totalInput.value = '';
+            // Nama & tanggal sengaja dibiarkan agar mudah input berturut-turut untuk orang/tanggal yang sama.
+
+            renderConsumable();
+            triggerCloudSave();
+        }
+
+        function deleteConsumableItem(id) {
+            consumableItems = consumableItems.filter(c => c.id !== id);
+            renderConsumable();
+            triggerCloudSave();
+        }
+
+        function resetAllConsumable() {
+            if (confirm('Hapus seluruh riwayat pengambilan consumable?')) {
+                consumableItems = [];
+                renderConsumable();
+                triggerCloudSave();
+            }
+        }
+
+        function formatConsumableDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr + 'T00:00:00');
+            if (isNaN(d)) return dateStr;
+            return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+
+        function renderConsumable() {
+            const listContainer = document.getElementById('consumableListContainer');
+            const recapContainer = document.getElementById('consumableRecapList');
+            const infoText = document.getElementById('consumableStatusInfo');
+            if (!listContainer || !recapContainer || !infoText) return;
+
+            populateConsumableNameSelect();
+
+            const totalQty = consumableItems.reduce((sum, c) => sum + (c.total || 0), 0);
+            infoText.innerText = `${consumableItems.length} Transaksi • ${totalQty} Unit Diambil`;
+
+            // Daftar riwayat, terbaru di atas
+            if (consumableItems.length === 0) {
+                listContainer.innerHTML = `<div class="py-16 text-center text-slate-300 font-black uppercase text-xs tracking-[0.3em]">Belum Ada Pengambilan</div>`;
+            } else {
+                const sorted = [...consumableItems].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                listContainer.innerHTML = sorted.map(c => `
+                    <div class="flex items-center justify-between gap-3 p-4 sm:p-5 bg-slate-50 border border-slate-100 rounded-2xl animate__animated animate__fadeIn">
+                        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+                            ${getAvatarHtml(c.name, "w-10 h-10")}
+                            <div class="min-w-0">
+                                <p class="text-xs sm:text-sm font-black text-slate-800 truncate">${escAttr(c.item)}</p>
+                                <p class="text-[10px] sm:text-[11px] font-bold text-slate-400 truncate">${escAttr(c.name)} • ${formatConsumableDate(c.date)}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 sm:gap-4 shrink-0">
+                            <span class="text-[11px] sm:text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl">x${c.total}</span>
+                            <button onclick="deleteConsumableItem('${c.id}')" class="text-rose-400 hover:text-rose-600 transition-colors" title="Hapus">
+                                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>`).join('');
+            }
+
+            // Rekap per orang: nama, foto, total unit, jumlah transaksi
+            const recap = {};
+            consumableItems.forEach(c => {
+                if (!recap[c.name]) recap[c.name] = { total: 0, count: 0 };
+                recap[c.name].total += (c.total || 0);
+                recap[c.name].count += 1;
+            });
+            const recapNames = Object.keys(recap).sort((a, b) => recap[b].total - recap[a].total);
+
+            if (recapNames.length === 0) {
+                recapContainer.innerHTML = `<div class="py-10 text-center text-slate-300 font-bold text-[10px] uppercase">Belum Ada Data</div>`;
+            } else {
+                recapContainer.innerHTML = recapNames.map(name => `
+                    <div class="flex items-center justify-between p-3 rounded-2xl border bg-white border-slate-100">
+                        <div class="flex items-center gap-3 min-w-0">
+                            ${getAvatarHtml(name, "w-8 h-8")}
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold text-slate-700 truncate">${escAttr(name)}</p>
+                                <p class="text-[9px] font-bold text-slate-400 uppercase">${recap[name].count} transaksi</p>
+                            </div>
+                        </div>
+                        <span class="text-[11px] font-black text-indigo-600 shrink-0 ml-2">${recap[name].total}</span>
+                    </div>`).join('');
+            }
+        }
+
         window.onload = () => {
             const now = new Date(); 
             const firstOfCurrent = getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
             document.getElementById('cycleBaseDate').value = firstOfCurrent;
+            document.getElementById('consumableDateInput').value = getLocalDateString(now);
             loadData();
         };
     </script>
